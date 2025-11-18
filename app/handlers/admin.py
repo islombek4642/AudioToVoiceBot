@@ -1,5 +1,5 @@
 from aiogram import Dispatcher, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import math
 import aiosqlite
+import shutil
 from pathlib import Path
 
 from app.core.config import config
@@ -29,12 +30,33 @@ logger = get_logger(__name__)
 class AdminStates(StatesGroup):
     waiting_channel_id = State()
     waiting_broadcast_message = State()
+    waiting_broadcast_target = State()
     waiting_user_search = State()
+    waiting_admin_id = State()
 
 
 # Admin Tekshirish Funksiyasi
 def is_admin(user_id: int) -> bool:
+    """Admin ekanligini tekshirish (faqat asosiy admin)"""
     return user_id == config.ADMIN_ID
+
+
+async def is_admin_async(user_id: int) -> bool:
+    """Admin ekanligini tekshirish (asosiy + qo'shimcha adminlar)"""
+    # Asosiy adminmi
+    if user_id == config.ADMIN_ID:
+        return True
+    
+    # Ma'lumotlar bazasidan qo'shimcha adminlarni tekshirish
+    try:
+        db = get_database()
+        user = await db.users.get_user(user_id)
+        if user and user.get('is_admin', False):
+            return True
+    except Exception:
+        pass
+    
+    return False
 
 
 # ASOSIY ADMIN PANEL
@@ -42,7 +64,7 @@ async def admin_handler(message: Message):
     """Asosiy admin panel"""
     logger.info(f"Admin panel /admin buyrug'i ishlatildi - User: {message.from_user.id}")
     
-    if not is_admin(message.from_user.id):
+    if not await is_admin_async(message.from_user.id):
         logger.warning(f"Admin panel'ga ruxsatsiz kirish urinishi /admin orqali: {message.from_user.id}")
         await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
@@ -82,7 +104,7 @@ async def admin_handler(message: Message):
 # CALLBACK QUERY HANDLERS
 async def admin_callback_handler(callback: CallbackQuery, state: FSMContext):
     """Admin callback handler"""
-    if not is_admin(callback.from_user.id):
+    if not await is_admin_async(callback.from_user.id):
         logger.warning(f"Admin panel'ga ruxsatsiz kirish urinishi: {callback.from_user.id}")
         await callback.answer("❌ Ruxsat yo'q!", show_alert=True)
         return
@@ -377,12 +399,20 @@ async def show_week_stats(callback: CallbackQuery, db):
 async def handle_users_callbacks(callback: CallbackQuery, data: str, state: FSMContext):
     """Foydalanuvchilar callback'larini boshqarish"""
     logger.info(f"Users callback ishga tushdi: {data}")
+    
+    # Admin ID o'chirib tashlash
+    if data.startswith("users_remove_admin_"):
+        user_id_to_remove = int(data.replace("users_remove_admin_", ""))
+        await remove_admin(callback, user_id_to_remove)
+        return
+    
     actions = {
         "users_list": lambda: show_users_list(callback),
         "users_search": lambda: start_user_search(callback, state),
         "users_active": lambda: show_active_users(callback),
         "users_blocked": lambda: show_blocked_users(callback),
         "users_admins": lambda: show_admin_users(callback),
+        "users_add_admin": lambda: start_add_admin(callback, state),
         "users_stats": lambda: show_user_stats(callback, get_database()),
     }
     action = actions.get(data)
@@ -478,28 +508,92 @@ async def show_admin_users(callback: CallbackQuery):
     db = get_database()
     try:
         admins = await db.users.get_admin_users(limit=50)
-        if not admins:
-            await callback.message.edit_text(
-                "👑 Adminlar ro'yxati bo'sh.",
-                reply_markup=AdminKeyboards.users_menu()
-            )
-            return
-
+        
         text = "👑 <b>Admin foydalanuvchilar</b>\n\n"
-        for admin in admins:
-            username = f"@{admin['username']}" if admin['username'] else MSG_USERNAME_MISSING
-            text += (
-                f"👑 <b>{admin['first_name']}</b> ({username})\n"
-                f"   🆔 <code>{admin['user_id']}</code>\n"
-                f"   📅 {admin['registration_date'][:10]}\n\n"
-            )
-
+        
+        # Asosiy admin (config'dan)
+        text += "⭐ <b>Asosiy Admin</b>\n"
+        text += f"   🆔 <code>{config.ADMIN_ID}</code>\n\n"
+        
+        # Qo'shimcha adminlar
+        if admins:
+            text += "➕ <b>Qo'shimcha adminlar:</b>\n"
+            buttons = []
+            for admin in admins:
+                if admin['user_id'] != config.ADMIN_ID:  # Asosiy adminni takrorlamaslik
+                    username = f"@{admin['username']}" if admin['username'] else MSG_USERNAME_MISSING
+                    text += (
+                        f"👑 <b>{admin['first_name']}</b> ({username})\n"
+                        f"   🆔 <code>{admin['user_id']}</code>\n"
+                        f"   📅 {admin['registration_date'][:10]}\n"
+                    )
+                    # O'chirish tugmasi
+                    buttons.append([
+                        InlineKeyboardButton(
+                            text=f"❌ {admin['first_name']} o'chirish",
+                            callback_data=f"users_remove_admin_{admin['user_id']}"
+                        )
+                    ])
+                    text += "\n"
+        else:
+            text += "📭 Qo'shimcha adminlar yo'q\n"
+        
+        # Orqaga tugmasi
+        buttons.append([
+            InlineKeyboardButton(text="➕ Admin qo'shish", callback_data="users_add_admin")
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_users")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
         await callback.message.edit_text(
             text.strip(),
-            reply_markup=AdminKeyboards.users_menu()
+            reply_markup=keyboard
         )
     except Exception as e:
         logger.error(f"Admin users'da xato: {e}")
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
+
+
+async def start_add_admin(callback: CallbackQuery, state: FSMContext):
+    """Admin qo'shishni boshlash"""
+    await callback.message.edit_text(
+        "👑 <b>Admin qo'shish</b>\n\n"
+        "Yangi admin qilmoqchi bo'lgan foydalanuvchining ID'sini yuboring:\n\n"
+        "❓ <b>ID'ni qanday olish mumkin:</b>\n"
+        "• Foydalanuvchi botga /start yuborishi kerak\n"
+        "• Keyin siz Foydalanuvchilar > Ro'yxat bo'limidan ID'ni ko'rishingiz mumkin\n\n"
+        "❌ Bekor qilish uchun /cancel"
+    )
+    await state.set_state(AdminStates.waiting_admin_id)
+
+
+async def remove_admin(callback: CallbackQuery, user_id: int):
+    """Admin huquqini olib tashlash"""
+    if user_id == config.ADMIN_ID:
+        await callback.answer("❌ Asosiy adminni o'chirib bo'lmaydi!", show_alert=True)
+        return
+    
+    db = get_database()
+    try:
+        # Admin huquqini olib tashlash
+        await db.users.update_user(user_id, {"is_admin": False})
+        
+        # Foydalanuvchi ma'lumotlarini olish
+        user = await db.users.get_user(user_id)
+        user_name = user['first_name'] if user else str(user_id)
+        
+        await callback.answer(f"✅ {user_name} endi admin emas!", show_alert=True)
+        
+        # Ro'yxatni yangilash
+        await show_admin_users(callback)
+        
+        logger.info(f"Admin o'chirildi: {user_id} by {callback.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"Admin o'chirishda xato: {e}")
         await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
@@ -971,20 +1065,51 @@ async def handle_channel_id_input(message: Message, state: FSMContext):
 
         if channel_input.startswith('@'):
             channel_username = channel_input.replace('@', '')
-            chat = await message.bot.get_chat(channel_input)
-            channel_id = chat.id
-        else:
+            try:
+                chat = await message.bot.get_chat(channel_input)
+                channel_id = chat.id
+            except Exception as e:
+                await message.answer("❌ Kanal topilmadi. Username to'g'ri ekanligini tekshiring.")
+                await state.clear()
+                return
+        elif channel_input.startswith('-100'):
             channel_id = int(channel_input)
-            chat = await message.bot.get_chat(channel_id)
-            channel_username = chat.username
+            try:
+                chat = await message.bot.get_chat(channel_id)
+                channel_username = chat.username
+            except Exception as e:
+                await message.answer("❌ Kanal topilmadi. ID to'g'ri ekanligini tekshiring.")
+                await state.clear()
+                return
+        else:
+            await message.answer("❌ Noto'g'ri format!\n\n"
+                               "To'g'ri formatlar:\n"
+                               "• @username\n"
+                               "• -100XXXXXXXXXX (kanal ID)")
+            await state.clear()
+            return
         
         if chat.type not in ['channel', 'supergroup']:
             await message.answer("❌ Faqat kanal yoki supergroup qo'shish mumkin.")
+            await state.clear()
             return
 
-        bot_member = await message.bot.get_chat_member(channel_id, message.bot.id)
-        if bot_member.status not in ['administrator', 'creator']:
-            await message.answer("❌ Bot bu kanalda admin emas. Avval botni admin qiling.")
+        # Bot adminligini tekshirish
+        try:
+            bot_member = await message.bot.get_chat_member(channel_id, message.bot.id)
+            if bot_member.status not in ['administrator', 'creator']:
+                await message.answer("❌ Bot bu kanalda admin emas!\n\n"
+                                   "🔧 Qadamlar:\n"
+                                   "1. Kanalga o'ting\n"
+                                   "2. Botni admin qiling\n"
+                                   "3. Qayta urinib ko'ring")
+                await state.clear()
+                return
+        except Exception as e:
+            logger.error(f"Bot adminligini tekshirib bo'lmadi: {e}")
+            await message.answer("⚠️ Bot adminligini tekshirib bo'lmadi.\n"
+                               "Bot kanalda admin ekanligiga ishonch hosil qiling.")
+            await state.clear()
             return
 
         try:
@@ -1013,6 +1138,65 @@ async def handle_channel_id_input(message: Message, state: FSMContext):
         await message.answer("❌ Kanal ID raqam bo'lishi kerak.")
     except Exception as e:
         logger.error(f"Kanal qo'shishda xato: {e}")
+        await message.answer(MSG_GENERIC_ERROR)
+        await state.clear()
+
+
+async def handle_admin_id_input(message: Message, state: FSMContext):
+    """Admin ID kiritish"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        # ID'ni tekshirish
+        admin_id_input = message.text.strip()
+        if not admin_id_input.isdigit():
+            await message.answer("❌ ID faqat raqamlardan iborat bo'lishi kerak.\n\n"
+                               "Iltimos, to'g'ri ID kiriting yoki /cancel tugmasini bosing.")
+            return
+        
+        new_admin_id = int(admin_id_input)
+        
+        # Asosiy adminmi tekshirish
+        if new_admin_id == config.ADMIN_ID:
+            await message.answer("ℹ️ Bu allaqachon asosiy admin!")
+            await state.clear()
+            return
+        
+        db = get_database()
+        
+        # Foydalanuvchi mavjudligini tekshirish
+        user = await db.users.get_user(new_admin_id)
+        if not user:
+            await message.answer("❌ Bunday foydalanuvchi topilmadi!\n\n"
+                               "Foydalanuvchi avval botga /start yuborgan bo'lishi kerak.")
+            await state.clear()
+            return
+        
+        # Allaqachon adminmi tekshirish
+        if user.get('is_admin', False):
+            await message.answer(f"ℹ️ {user['first_name']} allaqachon admin!")
+            await state.clear()
+            return
+        
+        # Admin qilish
+        await db.users.update_user(new_admin_id, {"is_admin": True})
+        
+        await message.answer(
+            f"✅ <b>Muvaffaqiyatli!</b>\n\n"
+            f"👤 <b>{user['first_name']}</b> endi admin!\n"
+            f"🆔 ID: <code>{new_admin_id}</code>\n\n"
+            f"Admin panelga kirish uchun /admin buyrug'ini ishlatishi mumkin.",
+            reply_markup=AdminKeyboards.users_menu()
+        )
+        
+        logger.info(f"Yangi admin qo'shildi: {new_admin_id} by {message.from_user.id}")
+        await state.clear()
+        
+    except ValueError:
+        await message.answer("❌ Noto'g'ri ID formati!")
+    except Exception as e:
+        logger.error(f"Admin qo'shishda xato: {e}")
         await message.answer(MSG_GENERIC_ERROR)
         await state.clear()
 
@@ -1254,6 +1438,7 @@ def register_admin_handlers(dp: Dispatcher):
     
     # State handlers
     dp.message.register(handle_channel_id_input, AdminStates.waiting_channel_id)
+    dp.message.register(handle_admin_id_input, AdminStates.waiting_admin_id)
     dp.message.register(handle_broadcast_message_input, AdminStates.waiting_broadcast_message)
     dp.message.register(cancel_handler, Command("cancel"))
     logger.info("Admin barcha handler'lar muvaffaqiyatli ro'yxatdan o'tkazildi")

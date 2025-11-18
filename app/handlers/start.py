@@ -116,6 +116,33 @@ async def about_handler(message: Message):
     await message.answer(about_text.strip())
 
 
+async def _get_user_stats(db, user_id):
+    """Foydalanuvchi statistikasini olish"""
+    try:
+        user = await db.users.get_user(user_id)
+        if user:
+            # Format dates
+            reg_date = datetime.fromisoformat(user['registration_date']).strftime('%d.%m.%Y')
+            if user['last_activity']:
+                last_activity = datetime.fromisoformat(user['last_activity']).strftime('%d.%m.%Y %H:%M')
+            else:
+                last_activity = reg_date
+            return reg_date, last_activity
+        else:
+            return "Noma'lum", "Noma'lum"
+    except Exception:
+        return "Noma'lum", "Noma'lum"
+
+
+async def _get_user_conversions_count(db, user_id):
+    """Foydalanuvchi konversiyalari sonini olish"""
+    try:
+        user = await db.users.get_user(user_id)
+        return user.get('conversions_count', 0) if user else 0
+    except Exception:
+        return 0
+
+
 async def settings_handler(message: Message):
     """Settings buyrug'i handler'i"""
     try:

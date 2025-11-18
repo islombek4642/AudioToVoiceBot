@@ -68,9 +68,10 @@ class AdminKeyboards:
             ],
             [
                 InlineKeyboardButton(text="👑 Adminlar", callback_data="users_admins"),
-                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="users_stats")
+                InlineKeyboardButton(text="➕ Admin qo'shish", callback_data="users_add_admin")
             ],
             [
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="users_stats"),
                 InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
