@@ -1,0 +1,5 @@
+# Minimal requirements for Python 3.13
+aiogram>=3.22.0
+python-dotenv>=1.0.0
+aiosqlite>=0.21.0
+loguru>=0.7.3
