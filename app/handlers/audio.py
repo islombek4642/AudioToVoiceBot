@@ -20,7 +20,7 @@ async def audio_document_handler(message: Message):
         telegram_file = await message.bot.get_file(document.file_id)
         
         # Fayl tekshirish
-        is_valid, validation_message = await audio_service.validate_audio_file(
+        is_valid, validation_message = audio_service.validate_audio_file(
             telegram_file, document.file_name
         )
         
@@ -75,7 +75,7 @@ async def audio_file_handler(message: Message):
         telegram_file = await message.bot.get_file(audio.file_id)
         
         # Fayl tekshirish
-        is_valid, validation_message = await audio_service.validate_audio_file(
+        is_valid, validation_message = audio_service.validate_audio_file(
             telegram_file, f"{audio.performer or 'Audio'} - {audio.title or 'Unknown'}.mp3"
         )
         

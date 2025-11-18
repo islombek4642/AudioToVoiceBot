@@ -120,34 +120,15 @@ async def settings_handler(message: Message):
     """Settings buyrug'i handler'i"""
     try:
         from app.database.database import get_database
-        
+
         db = get_database()
         user_id = message.from_user.id
-        
+
         # Foydalanuvchi statistikasini olish
-        try:
-            user_data = await db.users.get_user_by_id(user_id)
-            if user_data:
-                reg_date = user_data.get('registration_date', UNKNOWN_TEXT)
-                if reg_date and reg_date != UNKNOWN_TEXT:
-                    reg_date = reg_date[:10]  # Faqat sana
-                last_activity = user_data.get('last_activity', UNKNOWN_TEXT)
-                if last_activity and last_activity != UNKNOWN_TEXT:
-                    last_activity = last_activity[:16]  # Sana va vaqt
-            else:
-                reg_date = 'Bugun'
-                last_activity = 'Hozir'
-        except Exception:
-            reg_date = 'Bugun'
-            last_activity = 'Hozir'
-        
+        reg_date, last_activity = await _get_user_stats(db, user_id)
+
         # Konversiya statistikasi
-        try:
-            # Foydalanuvchining konversiyalari soni
-            cursor = await db.execute_query('SELECT COUNT(*) FROM conversions WHERE user_id = ?', (user_id,))
-            conversions_count = cursor[0] if cursor else 0
-        except Exception:
-            conversions_count = 0
+        conversions_count = await _get_user_conversions_count(db, user_id)
         
         settings_text = f"""
 ⚙️ <b>Sozlamalar</b>

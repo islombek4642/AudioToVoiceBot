@@ -5,7 +5,7 @@ import subprocess
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 import aiofiles
-from aiogram.types import File as TelegramFile, InputFile
+from aiogram.types import File as TelegramFile
 from aiogram import Bot
 
 from app.core.config import config
@@ -59,14 +59,14 @@ class AudioProcessor:
             
             # Audio faylni OGG formatiga o'tkazish (Telegram voice uchun)
             temp_output_path = self.temp_dir / f"output_{user_id}_{int(time.time())}.ogg"
-            
+
             success, error_msg = await self._convert_to_voice(
-                str(temp_input_path), 
-                str(temp_output_path)
+                str(temp_input_path),
+                str(temp_output_path),
             )
-            
+
             if not success:
-                await self._cleanup_temp_files([temp_output_path])
+                self._cleanup_temp_files([temp_output_path])
                 return False, error_msg, None
             
             # Metadata yaratish
@@ -107,13 +107,13 @@ class AudioProcessor:
                 })
             except Exception as db_error:
                 logger.error(f"Ma'lumotlar bazasiga xato yozishda muammo: {db_error}")
-            
-            await self._cleanup_temp_files([temp_output_path])
+
+            self._cleanup_temp_files([temp_output_path])
             return False, error_msg, None
-            
+
         finally:
             # Foydalanuvchi yuborib bo'lgandan so'ng chiqish fayli o'chiriladi
-            await self._cleanup_temp_files([temp_input_path])
+            self._cleanup_temp_files([temp_input_path])
     
     async def _convert_to_voice(self, input_path: str, output_path: str) -> Tuple[bool, Optional[str]]:
         """Audio faylni voice formatiga o'tkazish FFmpeg orqali"""
@@ -170,7 +170,7 @@ class AudioProcessor:
         """Format qo'llab-quvvatlanishini tekshirish"""
         return extension.lower() in self.supported_formats
     
-    async def _cleanup_temp_files(self, file_paths: list):
+    def _cleanup_temp_files(self, file_paths: list):
         """Vaqtinchalik fayllarni tozalash"""
         for file_path in file_paths:
             if file_path and os.path.exists(file_path):
@@ -179,58 +179,56 @@ class AudioProcessor:
                     logger.debug(f"Vaqtinchalik fayl o'chirildi: {file_path}")
                 except Exception as e:
                     logger.warning(f"Vaqtinchalik faylni o'chirishda xato: {e}")
-    
-    async def cleanup_old_temp_files(self, max_age_hours: int = 1):
+
+    def cleanup_old_temp_files(self, max_age_hours: int = 1):
         """Eski vaqtinchalik fayllarni tozalash"""
         try:
             current_time = time.time()
             max_age_seconds = max_age_hours * 3600
-            
+
             for file_path in self.temp_dir.glob("*"):
                 if file_path.is_file():
                     file_age = current_time - file_path.stat().st_mtime
                     if file_age > max_age_seconds:
                         file_path.unlink()
                         logger.debug(f"Eski vaqtinchalik fayl o'chirildi: {file_path}")
-            
+
         except Exception as e:
             logger.error(f"Eski fayllarni tozalashda xato: {e}")
 
 
 class AudioService:
     """Audio xizmat sinfi"""
-    
+
     def __init__(self):
         self.processor = AudioProcessor()
-    
+
     async def convert_audio_to_voice(
-        self, 
-        bot: Bot, 
-        telegram_file: TelegramFile, 
+        self,
+        bot: Bot,
+        telegram_file: TelegramFile,
         user_id: int,
-        original_filename: str = None
+        original_filename: str = None,
     ) -> Tuple[bool, str, Optional[str]]:
-        """
-        Audio faylni voice message'ga o'tkazish
-        
-        Returns:
-            Tuple[success, message, voice_file_path]
-        """
+        """Audio faylni voice message'ga o'tkazish"""
         try:
-            success, result, metadata = await self.processor.process_audio_file(
-                bot, telegram_file, user_id, original_filename
+            success, result, _ = await self.processor.process_audio_file(
+                bot,
+                telegram_file,
+                user_id,
+                original_filename,
             )
-            
+
             if success:
                 return True, "✅ Audio muvaffaqiyatli voice message'ga aylantirildi!", result
             else:
                 return False, f"❌ Xato: {result}", None
-                
+
         except Exception as e:
             error_msg = f"Xizmatda xato: {str(e)}"
             logger.error(error_msg)
             return False, error_msg, None
-    
+
     async def get_audio_info(self, file_path: str) -> Dict[str, Any]:
         """Audio fayl haqida ma'lumot olish FFprobe orqali"""
         try:
@@ -241,28 +239,32 @@ class AudioService:
                 '-print_format', 'json',
                 '-show_format',
                 '-show_streams',
-                file_path
+                file_path,
             ]
-            
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
-            
-            stdout, stderr = await process.communicate()
-            
+
+            stdout, _ = await process.communicate()
+
             if process.returncode == 0:
                 import json
+
                 probe_data = json.loads(stdout.decode('utf-8'))
-                
+
                 # Audio stream ma'lumotlarini olish
                 audio_stream = next(
-                    (stream for stream in probe_data.get('streams', []) 
-                     if stream.get('codec_type') == 'audio'), 
-                    {}
+                    (
+                        stream
+                        for stream in probe_data.get('streams', [])
+                        if stream.get('codec_type') == 'audio'
+                    ),
+                    {},
                 )
-                
+
                 info = {
                     'duration': float(probe_data.get('format', {}).get('duration', 0)),
                     'channels': int(audio_stream.get('channels', 0)),
@@ -270,42 +272,51 @@ class AudioService:
                     'bit_rate': int(audio_stream.get('bit_rate', 0)),
                     'file_size': os.path.getsize(file_path),
                     'format': Path(file_path).suffix[1:].lower(),
-                    'codec': audio_stream.get('codec_name', 'unknown')
+                    'codec': audio_stream.get('codec_name', 'unknown'),
                 }
-                
+
                 return info
-            else:
-                # FFprobe ishlamasa, basic ma'lumotlar
-                return {
-                    'duration': 0,
-                    'channels': 0,
-                    'sample_rate': 0,
-                    'bit_rate': 0,
-                    'file_size': os.path.getsize(file_path),
-                    'format': Path(file_path).suffix[1:].lower(),
-                    'codec': 'unknown'
-                }
-            
+
+            # FFprobe ishlamasa, basic ma'lumotlar
+            return {
+                'duration': 0,
+                'channels': 0,
+                'sample_rate': 0,
+                'bit_rate': 0,
+                'file_size': os.path.getsize(file_path),
+                'format': Path(file_path).suffix[1:].lower(),
+                'codec': 'unknown',
+            }
+
         except Exception as e:
             logger.error(f"Audio ma'lumotini olishda xato: {e}")
             return {}
-    
-    async def validate_audio_file(self, telegram_file: TelegramFile, filename: str = None) -> Tuple[bool, str]:
+
+    def validate_audio_file(
+        self,
+        telegram_file: TelegramFile,
+        filename: str = None,
+    ) -> Tuple[bool, str]:
         """Audio faylni tekshirish"""
         try:
             # Hajmni tekshirish
             if telegram_file.file_size > config.MAX_AUDIO_SIZE:
                 max_mb = config.MAX_AUDIO_SIZE // (1024 * 1024)
                 return False, f"❌ Fayl juda katta! Maksimal hajm: {max_mb}MB"
-            
+
             # Formatni tekshirish
-            extension = self.processor._get_file_extension(telegram_file.file_path or filename)
+            extension = self.processor._get_file_extension(
+                telegram_file.file_path or filename,
+            )
             if not self.processor._is_supported_format(extension):
                 formats = ", ".join(config.SUPPORTED_AUDIO_FORMATS)
-                return False, f"❌ Format qo'llab-quvvatlanmaydi! Qo'llab-quvvatlanadigan formatlar: {formats}"
-            
+                return False, (
+                    "❌ Format qo'llab-quvvatlanmaydi! "
+                    f"Qo'llab-quvvatlanadigan formatlar: {formats}"
+                )
+
             return True, "✅ Fayl to'g'ri"
-            
+
         except Exception as e:
             logger.error(f"Fayl tekshirishda xato: {e}")
             return False, f"❌ Fayl tekshirishda xato: {str(e)}"

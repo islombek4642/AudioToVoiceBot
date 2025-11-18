@@ -1,6 +1,10 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 
+STATISTICS_TEXT = "📊 Statistika"
+BACK_TEXT = "🔙 Orqaga"
+
+
 class AdminKeyboards:
     """Admin paneli uchun keyboard'lar"""
     
@@ -9,7 +13,7 @@ class AdminKeyboards:
         """Asosiy admin menu"""
         buttons = [
             [
-                InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats"),
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="admin_stats"),
                 InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="admin_users")
             ],
             [
@@ -45,7 +49,7 @@ class AdminKeyboards:
             ],
             [
                 InlineKeyboardButton(text="🔄 Yangilash", callback_data="stats_refresh"),
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -64,10 +68,10 @@ class AdminKeyboards:
             ],
             [
                 InlineKeyboardButton(text="👑 Adminlar", callback_data="users_admins"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data="users_stats")
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="users_stats")
             ],
             [
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -82,11 +86,11 @@ class AdminKeyboards:
             ],
             [
                 InlineKeyboardButton(text="📝 So'rovlar", callback_data="channels_requests"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data="channels_stats")
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="channels_stats")
             ],
             [
                 InlineKeyboardButton(text="🔧 Sozlamalar", callback_data="channels_settings"),
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -108,7 +112,7 @@ class AdminKeyboards:
                 InlineKeyboardButton(text="📊 Holat", callback_data="broadcast_status")
             ],
             [
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -120,7 +124,7 @@ class AdminKeyboards:
             [InlineKeyboardButton(text="🆕 Yangi foydalanuvchilar", callback_data="broadcast_group_new")],
             [InlineKeyboardButton(text="🛌 Noaktiv foydalanuvchilar", callback_data="broadcast_group_inactive")],
             [InlineKeyboardButton(text="👑 VIP/Premium", callback_data="broadcast_group_vip")],
-            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="broadcast_group_back")]
+            [InlineKeyboardButton(text=BACK_TEXT, callback_data="broadcast_group_back")]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
     
@@ -134,11 +138,11 @@ class AdminKeyboards:
             ],
             [
                 InlineKeyboardButton(text="❌ Rad etilgan", callback_data="requests_rejected"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data="requests_stats")
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data="requests_stats")
             ],
             [
                 InlineKeyboardButton(text="🔄 Yangilash", callback_data="requests_refresh"),
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -149,7 +153,7 @@ class AdminKeyboards:
         buttons = [
             [
                 InlineKeyboardButton(text="👤 Ma'lumotlar", callback_data=f"user_info_{user_id}"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data=f"user_stats_{user_id}")
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data=f"user_stats_{user_id}")
             ],
             [
                 InlineKeyboardButton(text="🚫 Bloklash", callback_data=f"user_block_{user_id}"),
@@ -160,7 +164,7 @@ class AdminKeyboards:
                 InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"user_delete_{user_id}")
             ],
             [
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="users_list")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="users_list")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -171,14 +175,14 @@ class AdminKeyboards:
         buttons = [
             [
                 InlineKeyboardButton(text="👁 Ko'rish", callback_data=f"channel_view_{channel_id}"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data=f"channel_stats_{channel_id}")
+                InlineKeyboardButton(text=STATISTICS_TEXT, callback_data=f"channel_stats_{channel_id}")
             ],
             [
                 InlineKeyboardButton(text="⏸ Faolsizlashtirish", callback_data=f"channel_disable_{channel_id}"),
                 InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"channel_delete_{channel_id}")
             ],
             [
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="channels_force_list")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="channels_force_list")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -196,7 +200,7 @@ class AdminKeyboards:
                 InlineKeyboardButton(text="💬 Izoh", callback_data=f"request_comment_{request_id}")
             ],
             [
-                InlineKeyboardButton(text="🔙 Orqaga", callback_data="requests_pending")
+                InlineKeyboardButton(text=BACK_TEXT, callback_data="requests_pending")
             ]
         ]
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -231,7 +235,7 @@ class AdminKeyboards:
             buttons.append(nav_buttons)
         
         # Orqaga tugmasi
-        buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_back")])
+        buttons.append([InlineKeyboardButton(text=BACK_TEXT, callback_data="admin_back")])
         
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 

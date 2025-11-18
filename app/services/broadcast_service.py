@@ -25,111 +25,77 @@ class BroadcastService:
             self.history_file.write_text("[]", encoding="utf-8")
     
     async def broadcast_message(
-        self, 
-        bot: Bot, 
+        self,
+        bot: Bot,
         message_text: str = None,
         message_object: Message = None,
         target_type: str = "all",
-        admin_id: int = None
+        admin_id: int = None,
     ) -> Dict[str, Any]:
-        """
-        Broadcast xabar yuborish
-        
-        Args:
-            bot: Bot instance
-            message_text: Yuborilishi kerak bo'lgan matn
-            message_object: Forward/copy qilinadigan xabar
-            target_type: "all", "active", "blocked" 
-            admin_id: Admin ID (logging uchun)
-        
-        Returns:
-            Dict with results: success_count, failed_count, total_count
-        """
+        """Broadcast xabar yuborish"""
         try:
             # Foydalanuvchilarni olish
             users = await self._get_target_users(target_type)
-            
+
             if not users:
                 return {
                     "success": False,
                     "message": "Foydalanuvchilar topilmadi",
                     "total_count": 0,
                     "success_count": 0,
-                    "failed_count": 0
+                    "failed_count": 0,
                 }
-            
+
             # Broadcast natijalarini tracking qilish
-            results = {
+            results: Dict[str, Any] = {
                 "total_count": len(users),
                 "success_count": 0,
                 "failed_count": 0,
                 "blocked_count": 0,
                 "retry_count": 0,
-                "errors": {}
+                "errors": {},
             }
-            
+
             # Xabar yuborishni boshlash
             start_time = datetime.now()
-            logger.info(f"Broadcast boshlandi: {results['total_count']} foydalanuvchiga")
-            
+            logger.info(
+                f"Broadcast boshlandi: {results['total_count']} foydalanuvchiga",
+            )
+
             # Batch'lar bo'yicha yuborish (30ta bir vaqtda)
             batch_size = 30
-            for i in range(0, len(users), batch_size):
-                batch = users[i:i + batch_size]
-                
-                # Parallel yuborish
-                tasks = []
-                for user in batch:
-                    task = self._send_to_user(
-                        bot, user['user_id'], message_text, message_object
-                    )
-                    tasks.append(task)
-                
-                # Batch'ni yuborish
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                # Natijalarni hisoblash
-                for result in batch_results:
-                    if isinstance(result, dict):
-                        if result['success']:
-                            results['success_count'] += 1
-                        else:
-                            results['failed_count'] += 1
-                            error_type = result.get('error_type', 'unknown')
-                            if error_type == 'blocked':
-                                results['blocked_count'] += 1
-                            elif error_type == 'retry':
-                                results['retry_count'] += 1
-                    else:
-                        results['failed_count'] += 1
-                        logger.error(f"Batch task error: {result}")
-                
-                # Rate limiting uchun kutish
-                await asyncio.sleep(1)
-            
+            await self._process_batches(
+                bot=bot,
+                users=users,
+                message_text=message_text,
+                message_object=message_object,
+                results=results,
+                batch_size=batch_size,
+            )
+
             # Natijalarni logging qilish
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             logger.info(
                 f"Broadcast yakunlandi: "
                 f"{results['success_count']}/{results['total_count']} muvaffaqiyatli. "
-                f"Vaqt: {duration:.2f}s"
+                f"Vaqt: {duration:.2f}s",
             )
-            
+
             # Natijalarni ma'lumotlar bazasiga saqlash
             await self._log_broadcast_result(
                 admin_id=admin_id,
                 target_type=target_type,
                 message_text=message_text[:100] if message_text else "Media",
                 results=results,
-                duration=duration
+                duration=duration,
             )
-            
-            results['success'] = True
-            results['duration'] = duration
+
+            results["success"] = True
+            results["duration"] = duration
             return results
-            
+
         except Exception as e:
             logger.error(f"Broadcast'da umumiy xato: {e}")
             return {
@@ -137,8 +103,54 @@ class BroadcastService:
                 "message": f"Xato: {str(e)}",
                 "total_count": 0,
                 "success_count": 0,
-                "failed_count": 0
+                "failed_count": 0,
             }
+
+    async def _process_batches(
+        self,
+        bot: Bot,
+        users: List[Dict[str, Any]],
+        message_text: Optional[str],
+        message_object: Optional[Message],
+        results: Dict[str, Any],
+        batch_size: int,
+    ) -> None:
+        for i in range(0, len(users), batch_size):
+            batch = users[i : i + batch_size]
+
+            # Parallel yuborish
+            tasks = []
+            for user in batch:
+                tasks.append(
+                    self._send_to_user(
+                        bot,
+                        user["user_id"],
+                        message_text,
+                        message_object,
+                    ),
+                )
+
+            # Batch'ni yuborish
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Natijalarni hisoblash
+            for result in batch_results:
+                if isinstance(result, dict):
+                    if result["success"]:
+                        results["success_count"] += 1
+                    else:
+                        results["failed_count"] += 1
+                        error_type = result.get("error_type", "unknown")
+                        if error_type == "blocked":
+                            results["blocked_count"] += 1
+                        elif error_type == "retry":
+                            results["retry_count"] += 1
+                else:
+                    results["failed_count"] += 1
+                    logger.error(f"Batch task error: {result}")
+
+            # Rate limiting uchun kutish
+            await asyncio.sleep(1)
     
     async def _get_target_users(self, target_type: str) -> List[Dict[str, Any]]:
         """Target foydalanuvchilarni olish"""

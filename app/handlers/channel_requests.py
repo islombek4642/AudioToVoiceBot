@@ -93,43 +93,63 @@ async def start_channel_request(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ChannelRequestStates.waiting_channel_info)
 
 
+def _validate_channel_request_lines(lines):
+    if len(lines) < 2:
+        return (
+            "❌ Noto'g'ri format!\n\n"
+            "Kamida kanal ID/username va nomini kiriting."
+        )
+    return None
+
+
+def _parse_channel_basic_data(lines):
+    channel_info = lines[0].strip()
+    channel_name = lines[1].strip()
+    invite_link = lines[3].strip() if len(lines) > 3 else ""
+    return channel_info, channel_name, invite_link
+
+
+def _parse_channel_identifier(channel_info):
+    channel_id = None
+    channel_username = None
+
+    if channel_info.startswith('@'):
+        channel_username = channel_info
+    elif channel_info.startswith('-') or channel_info.isdigit():
+        try:
+            channel_id = int(channel_info)
+        except ValueError:
+            return None, None, "❌ Noto'g'ri kanal ID formati."
+    else:
+        return (
+            None,
+            None,
+            "❌ Kanal ID -1001234567890 formatida yoki @username formatida bo'lishi kerak.",
+        )
+
+    return channel_id, channel_username, None
+
+
 async def handle_channel_request_input(message: Message, state: FSMContext):
     """Kanal ma'lumotlarini kiritish"""
     try:
         user_input = message.text.strip()
         lines = user_input.split('\n')
         
-        if len(lines) < 2:
-            await message.reply(
-                "❌ Noto'g'ri format!\n\n"
-                "Kamida kanal ID/username va nomini kiriting."
-            )
+        error_message = _validate_channel_request_lines(lines)
+        if error_message:
+            await message.reply(error_message)
             return
-        
+
         # Ma'lumotlarni parsing qilish
-        channel_info = lines[0].strip()
-        channel_name = lines[1].strip()
-        
-        invite_link = lines[3].strip() if len(lines) > 3 else ""
-        
+        channel_info, channel_name, invite_link = _parse_channel_basic_data(lines)
+
         # Kanal ID yoki username'ni aniqlash
-        channel_id = None
-        channel_username = None
-        
-        if channel_info.startswith('@'):
-            channel_username = channel_info
-        elif channel_info.startswith('-') or channel_info.isdigit():
-            try:
-                channel_id = int(channel_info)
-            except ValueError:
-                await message.reply("❌ Noto'g'ri kanal ID formati.")
-                return
-        else:
-            await message.reply(
-                "❌ Kanal ID -1001234567890 formatida yoki @username formatida bo'lishi kerak."
-            )
+        channel_id, channel_username, error_message = _parse_channel_identifier(channel_info)
+        if error_message:
+            await message.reply(error_message)
             return
-        
+
         # So'rovni yaratish
         request_data = {
             'channel_id': channel_id or 0,  # Placeholder for username
@@ -299,6 +319,38 @@ async def notify_admin_about_request(bot, request_data, user):
         logger.error(f"Admin'ga xabar yuborishda xato: {e}")
 
 
+async def _handle_request_approve(callback: CallbackQuery, request_id: int, db):
+    # So'rovni tasdiqlash
+    success = await db.channels.approve_request(
+        int(request_id),
+        callback.from_user.id,
+    )
+
+    if success:
+        await callback.answer("✅ So'rov tasdiqlandi!", show_alert=True)
+        # Foydalanuvchiga xabar yuborish
+        await notify_user_about_approval(callback.bot, int(request_id), True)
+        await show_pending_requests(callback, db)
+    else:
+        await callback.answer("❌ Tasdiqlashda xato!", show_alert=True)
+
+
+async def _handle_request_reject(callback: CallbackQuery, state: FSMContext, request_id: str):
+    # Izoh so'rash
+    await callback.message.edit_text(
+        "❌ <b>So'rovni rad etish</b>\n\n"
+        "Rad etish sababini kiriting:",
+        reply_markup=UserKeyboards.cancel_menu(),
+    )
+    await state.set_state(ChannelRequestStates.waiting_admin_comment)
+    await state.update_data(request_id=request_id, action="reject")
+
+
+async def _handle_request_view(callback: CallbackQuery, request_id: int, db):
+    # So'rov tafsilotlarini ko'rsatish
+    await show_request_details(callback, int(request_id), db)
+
+
 async def handle_request_approval(callback: CallbackQuery, state: FSMContext):
     """So'rovni tasdiqlash"""
     data = callback.data
@@ -316,34 +368,15 @@ async def handle_request_approval(callback: CallbackQuery, state: FSMContext):
     try:
         db = get_database()
         
-        if action == "approve":
-            # So'rovni tasdiqlash
-            success = await db.channels.approve_request(
-                int(request_id), 
-                callback.from_user.id
-            )
-            
-            if success:
-                await callback.answer("✅ So'rov tasdiqlandi!", show_alert=True)
-                # Foydalanuvchiga xabar yuborish
-                await notify_user_about_approval(callback.bot, int(request_id), True)
-                await show_pending_requests(callback, db)
-            else:
-                await callback.answer("❌ Tasdiqlashda xato!", show_alert=True)
-        
-        elif action == "reject":
-            # Izoh so'rash
-            await callback.message.edit_text(
-                "❌ <b>So'rovni rad etish</b>\n\n"
-                "Rad etish sababini kiriting:",
-                reply_markup=UserKeyboards.cancel_menu()
-            )
-            await state.set_state(ChannelRequestStates.waiting_admin_comment)
-            await state.update_data(request_id=request_id, action="reject")
-        
-        elif action == "view":
-            # So'rov tafsilotlarini ko'rsatish
-            await show_request_details(callback, int(request_id), db)
+        handlers = {
+            "approve": lambda: _handle_request_approve(callback, int(request_id), db),
+            "reject": lambda: _handle_request_reject(callback, state, request_id),
+            "view": lambda: _handle_request_view(callback, int(request_id), db),
+        }
+
+        handler = handlers.get(action)
+        if handler:
+            await handler()
         else:
             await callback.answer("❓ Noma'lum amal.")
             

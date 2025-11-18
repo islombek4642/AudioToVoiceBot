@@ -9,6 +9,8 @@ from app.database.database import get_database
 
 logger = get_logger(__name__)
 
+CHAT_NOT_FOUND_LITERAL = "chat not found"
+
 
 class ForceSubscribeService:
     """Majburiy obuna xizmati"""
@@ -71,10 +73,11 @@ class ForceSubscribeService:
                 return False
                 
         except TelegramBadRequest as e:
-            if "user not found" in str(e).lower():
+            error_text = str(e).lower()
+            if "user not found" in error_text:
                 logger.warning(f"Foydalanuvchi {user_id} topilmadi")
                 return False
-            elif "chat not found" in str(e).lower():
+            elif CHAT_NOT_FOUND_LITERAL in error_text:
                 logger.warning(f"Kanal {channel_id} topilmadi")
                 return True  # Kanal topilmasa, obuna shartini o'tkazish
             else:
@@ -89,49 +92,57 @@ class ForceSubscribeService:
             logger.error(f"Obuna tekshirishda kutilmagan xato: {e}")
             return True  # Xato holatida ruxsat berish
     
-    async def create_subscription_keyboard(self, channels: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
+    def create_subscription_keyboard(self, channels: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
         """Obuna bo'lish uchun keyboard yaratish"""
         buttons = []
-        
+
         for channel in channels:
-            channel_name = channel.get('channel_title') or channel.get('channel_username') or f"Kanal {channel['channel_id']}"
-            
+            channel_name = (
+                channel.get('channel_title')
+                or channel.get('channel_username')
+                or f"Kanal {channel['channel_id']}"
+            )
+
             # Kanalga o'tish tugmasi
             if channel.get('channel_username'):
                 url = f"https://t.me/{channel['channel_username'].replace('@', '')}"
             elif channel.get('invite_link'):
                 url = channel['invite_link']
             else:
-                # Agar link bo'lmasa, kanal ID orqali
-                url = f"https://t.me/c/{str(channel['channel_id'])[4:]}"  # -100 ni olib tashlash
-            
+                # Agar link bo'lmasa, kanal ID orqali (-100 prefiksini olib tashlash)
+                url = f"https://t.me/c/{str(channel['channel_id'])[4:]}"
+
             button = InlineKeyboardButton(
                 text=f"📢 {channel_name}",
-                url=url
+                url=url,
             )
             buttons.append([button])
-        
+
         # Tekshirish tugmasi
         check_button = InlineKeyboardButton(
             text="✅ Obunani tekshirish",
-            callback_data="check_subscription"
+            callback_data="check_subscription",
         )
         buttons.append([check_button])
-        
+
         return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    async def get_subscription_message(self, channels: List[Dict[str, Any]]) -> str:
+
+    def get_subscription_message(self, channels: List[Dict[str, Any]]) -> str:
         """Obuna xabari matnini yaratish"""
         if not channels:
             return "✅ Barcha majburiy kanallarga obuna bo'lgansiz!"
-        
+
         channel_list = []
         for i, channel in enumerate(channels, 1):
-            channel_name = channel.get('channel_title') or channel.get('channel_username') or f"Kanal {channel['channel_id']}"
+            channel_name = (
+                channel.get('channel_title')
+                or channel.get('channel_username')
+                or f"Kanal {channel['channel_id']}"
+            )
             channel_list.append(f"{i}. {channel_name}")
-        
+
         channels_text = "\n".join(channel_list)
-        
+
         message = f"""
 🔒 <b>Majburiy obuna</b>
 
@@ -141,7 +152,7 @@ Botdan foydalanish uchun quyidagi kanal/guruhlarga obuna bo'lishingiz kerak:
 
 📌 Obuna bo'lgandan so'ng "✅ Obunani tekshirish" tugmasini bosing.
         """
-        
+
         return message.strip()
     
     async def add_force_channel(
@@ -191,7 +202,8 @@ Botdan foydalanish uchun quyidagi kanal/guruhlarga obuna bo'lishingiz kerak:
                     return False, "❌ Ma'lumotlar bazasiga yozishda xato"
                     
             except TelegramBadRequest as e:
-                if "chat not found" in str(e).lower():
+                error_text = str(e).lower()
+                if CHAT_NOT_FOUND_LITERAL in error_text:
                     return False, "❌ Kanal topilmadi. Kanal ID'ni tekshiring."
                 else:
                     return False, f"❌ Telegram API xatosi: {e}"
@@ -254,7 +266,8 @@ Botdan foydalanish uchun quyidagi kanal/guruhlarga obuna bo'lishingiz kerak:
                     return False, "❌ So'rovni yuborishda xato"
                     
             except TelegramBadRequest as e:
-                if "chat not found" in str(e).lower():
+                error_text = str(e).lower()
+                if CHAT_NOT_FOUND_LITERAL in error_text:
                     return False, "❌ Kanal topilmadi. Kanal ID'ni yoki username'ni tekshiring."
                 else:
                     return False, f"❌ Telegram API xatosi: {e}"
