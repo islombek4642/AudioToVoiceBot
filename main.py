@@ -110,7 +110,7 @@ async def main():
     except Exception as e:
         logger.error(f"Bot ishida xato: {e}")
         # Re-raise the exception to stop the application as expected
-        raise e
+        raise
         
     finally:
         if 'bot' in locals() and 'dp' in locals():
@@ -122,3 +122,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot to'xtatildi")
+        raise  # Re-raise to stop the application as expected
