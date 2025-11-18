@@ -99,3 +99,8 @@ Thumbs.db
 *.flac
 *.aac
 data/audio/
+
+# Runtime data files
+data/broadcast_history.json
+data/*.json
+!data/__init__.py
