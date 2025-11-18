@@ -111,6 +111,37 @@ class BroadcastService:
             logger.error(f"Broadcast'da umumiy xato: {e}")
             return self._create_empty_result(f"Xato: {str(e)}")
 
+    async def _send_batch_messages(
+        self, 
+        bot: Bot, 
+        batch: List[Dict[str, Any]], 
+        message_text: Optional[str], 
+        message_object: Optional[Message]
+    ) -> List[Any]:
+        """Batch xabarlarini parallel yuborish"""
+        tasks = [
+            self._send_to_user(bot, user["user_id"], message_text, message_object)
+            for user in batch
+        ]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+    
+    def _update_results_from_batch(self, batch_results: List[Any], results: Dict[str, Any]) -> None:
+        """Batch natijalaridan umumiy natijalarni yangilash"""
+        for result in batch_results:
+            if isinstance(result, dict):
+                if result["success"]:
+                    results["success_count"] += 1
+                else:
+                    results["failed_count"] += 1
+                    error_type = result.get("error_type", "unknown")
+                    if error_type == "blocked":
+                        results["blocked_count"] += 1
+                    elif error_type == "retry":
+                        results["retry_count"] += 1
+            else:
+                results["failed_count"] += 1
+                logger.error(f"Batch task error: {result}")
+    
     async def _process_batches(
         self,
         bot: Bot,
@@ -120,40 +151,16 @@ class BroadcastService:
         results: Dict[str, Any],
         batch_size: int,
     ) -> None:
+        """Foydalanuvchilarni batch'larga bo'lib xabar yuborish"""
         for i in range(0, len(users), batch_size):
             batch = users[i : i + batch_size]
-
-            # Parallel yuborish
-            tasks = []
-            for user in batch:
-                tasks.append(
-                    self._send_to_user(
-                        bot,
-                        user["user_id"],
-                        message_text,
-                        message_object,
-                    ),
-                )
-
-            # Batch'ni yuborish
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Natijalarni hisoblash
-            for result in batch_results:
-                if isinstance(result, dict):
-                    if result["success"]:
-                        results["success_count"] += 1
-                    else:
-                        results["failed_count"] += 1
-                        error_type = result.get("error_type", "unknown")
-                        if error_type == "blocked":
-                            results["blocked_count"] += 1
-                        elif error_type == "retry":
-                            results["retry_count"] += 1
-                else:
-                    results["failed_count"] += 1
-                    logger.error(f"Batch task error: {result}")
-
+            
+            batch_results = await self._send_batch_messages(
+                bot, batch, message_text, message_object
+            )
+            
+            self._update_results_from_batch(batch_results, results)
+            
             # Rate limiting uchun kutish
             await asyncio.sleep(1)
     
