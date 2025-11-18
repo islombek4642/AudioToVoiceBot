@@ -65,20 +65,43 @@ def is_ffmpeg_available():
         return False
 
 
+def check_local_ffmpeg():
+    """Loyiha papkasidagi FFmpeg'ni tekshirish"""
+    from pathlib import Path
+    ffmpeg_exe = Path("ffmpeg/ffmpeg.exe")
+    ffprobe_exe = Path("ffmpeg/ffprobe.exe")
+    return ffmpeg_exe.exists() and ffprobe_exe.exists()
+
+
 def setup_ffmpeg():
     """FFmpeg setup skriptini chaqirish"""
     print("\n🔍 FFmpeg tekshirilmoqda...")
     
-    if is_ffmpeg_available():
-        print("✅ FFmpeg allaqachon o'rnatilgan va ishlayapti!")
+    # Avval loyiha papkasidagi FFmpeg'ni tekshirish
+    if check_local_ffmpeg():
+        print("✅ Loyiha papkasida FFmpeg topildi!")
         return True
     
-    print("📦 FFmpeg topilmadi. O'rnatish boshlanyapti...")
-    try:
-        result = subprocess.run([sys.executable, 'setup_ffmpeg.py'], check=True)
+    # System PATH'dagi FFmpeg'ni tekshirish
+    if is_ffmpeg_available():
+        print("✅ System'da FFmpeg o'rnatilgan va ishlayapti!")
         return True
+    
+    print("📦 FFmpeg topilmadi. Avtomatik yuklab olinmoqda...")
+    try:
+        result = subprocess.run([sys.executable, 'download_ffmpeg.py'], check=True)
+        
+        # Yuklab olingandan keyin tekshirish
+        if check_local_ffmpeg():
+            print("✅ FFmpeg muvaffaqiyatli yuklab olindi!")
+            return True
+        else:
+            print("❌ FFmpeg yuklab olindi, lekin fayllar topilmadi")
+            return False
+            
     except subprocess.CalledProcessError:
-        print("❌ FFmpeg setup muvaffaqiyatsiz")
+        print("❌ FFmpeg yuklab olish muvaffaqiyatsiz")
+        print("💡 Manual yuklab olish uchun: python download_ffmpeg.py")
         return False
 
 

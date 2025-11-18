@@ -104,3 +104,12 @@ data/audio/
 data/broadcast_history.json
 data/*.json
 !data/__init__.py
+
+# FFmpeg binaries (will be downloaded automatically)
+ffmpeg/*.exe
+ffmpeg/*.dll
+ffmpeg/*.zip
+!ffmpeg/README.md
+
+# Temporary download files
+temp/

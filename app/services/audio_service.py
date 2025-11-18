@@ -15,6 +15,28 @@ from app.database.database import get_database
 logger = get_logger(__name__)
 
 
+def get_ffmpeg_path():
+    """FFmpeg binary path'ni olish"""
+    # Loyiha papkasidagi FFmpeg
+    local_ffmpeg = Path("ffmpeg/ffmpeg.exe")
+    if local_ffmpeg.exists():
+        return str(local_ffmpeg.absolute())
+    
+    # System PATH'dagi FFmpeg
+    return "ffmpeg"
+
+
+def get_ffprobe_path():
+    """FFprobe binary path'ni olish"""
+    # Loyiha papkasidagi FFprobe
+    local_ffprobe = Path("ffmpeg/ffprobe.exe")
+    if local_ffprobe.exists():
+        return str(local_ffprobe.absolute())
+    
+    # System PATH'dagi FFprobe
+    return "ffprobe"
+
+
 class AudioProcessor:
     """Audio fayllarni qayta ishlash uchun sinf"""
     
@@ -120,7 +142,7 @@ class AudioProcessor:
         try:
             # FFmpeg buyrug'i
             cmd = [
-                'ffmpeg',
+                get_ffmpeg_path(),
                 '-i', input_path,
                 '-vn',
                 '-ac', '1',  # Mono
@@ -234,7 +256,7 @@ class AudioService:
         try:
             # FFprobe buyrug'i
             cmd = [
-                'ffprobe',
+                get_ffprobe_path(),
                 '-v', 'quiet',
                 '-print_format', 'json',
                 '-show_format',
