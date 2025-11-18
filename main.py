@@ -109,6 +109,7 @@ async def main():
         
     except Exception as e:
         logger.error(f"Bot ishida xato: {e}")
+        raise
         
     finally:
         if 'bot' in locals() and 'dp' in locals():

@@ -155,6 +155,44 @@ Botdan foydalanish uchun quyidagi kanal/guruhlarga obuna bo'lishingiz kerak:
 
         return message.strip()
     
+    async def _validate_channel_and_bot_permissions(self, bot: Bot, channel_id: int) -> Tuple[bool, str, Optional[Any]]:
+        """Kanal va bot ruxsatlarini tekshirish"""
+        try:
+            chat = await bot.get_chat(channel_id)
+            bot_member = await bot.get_chat_member(channel_id, bot.id)
+            
+            if bot_member.status not in ['administrator', 'creator']:
+                return False, "❌ Bot bu kanalda admin emas. Avval botni kanal adminliriga qo'shing.", None
+            
+            return True, "", chat
+            
+        except TelegramBadRequest as e:
+            error_text = str(e).lower()
+            if CHAT_NOT_FOUND_LITERAL in error_text:
+                return False, "❌ Kanal topilmadi. Kanal ID'ni tekshiring.", None
+            else:
+                return False, f"❌ Telegram API xatosi: {e}", None
+    
+    def _prepare_channel_data(self, channel_id: int, admin_id: int, chat, channel_username: str = None, invite_link: str = None) -> Dict[str, Any]:
+        """Kanal ma'lumotlarini tayyorlash"""
+        return {
+            'channel_id': channel_id,
+            'channel_username': channel_username or chat.username,
+            'channel_title': chat.title or chat.first_name,
+            'channel_type': chat.type,
+            'added_by': admin_id,
+            'invite_link': invite_link
+        }
+    
+    async def _try_create_invite_link(self, bot: Bot, channel_id: int, chat, channel_data: Dict[str, Any]) -> None:
+        """Invite link yaratishga harakat qilish"""
+        try:
+            if chat.type in ['channel', 'supergroup']:
+                invite_link_obj = await bot.create_chat_invite_link(channel_id)
+                channel_data['invite_link'] = invite_link_obj.invite_link
+        except Exception as e:
+            logger.warning(f"Invite link yaratishda xato: {e}")
+    
     async def add_force_channel(
         self, 
         bot: Bot, 
@@ -166,48 +204,26 @@ Botdan foydalanish uchun quyidagi kanal/guruhlarga obuna bo'lishingiz kerak:
         """Majburiy obuna kanalini qo'shish"""
         try:
             # Kanalning mavjudligini va bot ruxsatlarini tekshirish
-            try:
-                chat = await bot.get_chat(channel_id)
-                bot_member = await bot.get_chat_member(channel_id, bot.id)
+            is_valid, error_msg, chat = await self._validate_channel_and_bot_permissions(bot, channel_id)
+            if not is_valid:
+                return False, error_msg
+            
+            # Kanal ma'lumotlarini to'ldirish
+            channel_data = self._prepare_channel_data(channel_id, admin_id, chat, channel_username, invite_link)
+            
+            # Invite link olishga harakat qilish
+            if not invite_link:
+                await self._try_create_invite_link(bot, channel_id, chat, channel_data)
+            
+            # Ma'lumotlar bazasiga qo'shish
+            success = await self.db.channels.add_force_channel(channel_data)
+            
+            if success:
+                channel_name = channel_data['channel_title'] or channel_data['channel_username']
+                return True, f"✅ Kanal '{channel_name}' majburiy obuna ro'yxatiga qo'shildi"
+            else:
+                return False, "❌ Ma'lumotlar bazasiga yozishda xato"
                 
-                if bot_member.status not in ['administrator', 'creator']:
-                    return False, "❌ Bot bu kanalda admin emas. Avval botni kanal adminliriga qo'shing."
-                
-                # Kanal ma'lumotlarini to'ldirish
-                channel_data = {
-                    'channel_id': channel_id,
-                    'channel_username': channel_username or chat.username,
-                    'channel_title': chat.title or chat.first_name,
-                    'channel_type': chat.type,
-                    'added_by': admin_id,
-                    'invite_link': invite_link
-                }
-                
-                # Invite link olishga harakat qilish
-                if not invite_link:
-                    try:
-                        if chat.type in ['channel', 'supergroup']:
-                            invite_link_obj = await bot.create_chat_invite_link(channel_id)
-                            channel_data['invite_link'] = invite_link_obj.invite_link
-                    except Exception as e:
-                        logger.warning(f"Invite link yaratishda xato: {e}")
-                
-                # Ma'lumotlar bazasiga qo'shish
-                success = await self.db.channels.add_force_channel(channel_data)
-                
-                if success:
-                    channel_name = channel_data['channel_title'] or channel_data['channel_username']
-                    return True, f"✅ Kanal '{channel_name}' majburiy obuna ro'yxatiga qo'shildi"
-                else:
-                    return False, "❌ Ma'lumotlar bazasiga yozishda xato"
-                    
-            except TelegramBadRequest as e:
-                error_text = str(e).lower()
-                if CHAT_NOT_FOUND_LITERAL in error_text:
-                    return False, "❌ Kanal topilmadi. Kanal ID'ni tekshiring."
-                else:
-                    return False, f"❌ Telegram API xatosi: {e}"
-                    
         except Exception as e:
             logger.error(f"Majburiy kanal qo'shishda xato: {e}")
             return False, f"❌ Kutilmagan xato: {str(e)}"

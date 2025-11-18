@@ -43,12 +43,6 @@ async def _handle_check_subscription_callback(
     return True
 
 
-def _should_skip_checks(user, bot) -> bool:
-    return not user or not bot or _is_admin_user(user) or _is_force_subscribe_disabled()
-
-
-async def _handle_callback_query(event: CallbackQuery, bot: Bot, user_id: int, handler: Callable[[Message | CallbackQuery, Dict[str, Any]], Awaitable[Any]], data: Dict[str, Any]) -> bool:
-    return await _handle_check_subscription_callback(event, bot, user_id, handler, data)
 
 
 class ForceSubscribeMiddleware(BaseMiddleware):
@@ -64,21 +58,12 @@ class ForceSubscribeMiddleware(BaseMiddleware):
             user = event.from_user
             bot: Bot = data.get('bot')
 
-            if not user or not bot:
+            # Asosiy tekshiruvlar - birlashtirish
+            if (not user or not bot or 
+                _is_admin_user(user) or 
+                _is_force_subscribe_disabled() or
+                (isinstance(event, Message) and _is_unrestricted_command(event))):
                 return await handler(event, data)
-
-            # Admin uchun majburiy obuna yo'q
-            if _is_admin_user(user):
-                return await handler(event, data)
-
-            # Majburiy obuna o'chirilgan bo'lsa
-            if _is_force_subscribe_disabled():
-                return await handler(event, data)
-
-            # Start va help buyruqlarini har doim ruxsat berish
-            if isinstance(event, Message):
-                if _is_unrestricted_command(event):
-                    return await handler(event, data)
 
             # Callback query: obuna tekshirish
             if isinstance(event, CallbackQuery):

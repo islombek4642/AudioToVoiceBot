@@ -24,6 +24,57 @@ class BroadcastService:
         if not self.history_file.exists():
             self.history_file.write_text("[]", encoding="utf-8")
     
+    def _create_empty_result(self, message: str = "Foydalanuvchilar topilmadi") -> Dict[str, Any]:
+        """Bo'sh natija yaratish"""
+        return {
+            "success": False,
+            "message": message,
+            "total_count": 0,
+            "success_count": 0,
+            "failed_count": 0,
+        }
+    
+    def _create_initial_results(self, users_count: int) -> Dict[str, Any]:
+        """Boshlang'ich natijalar yaratish"""
+        return {
+            "total_count": users_count,
+            "success_count": 0,
+            "failed_count": 0,
+            "blocked_count": 0,
+            "retry_count": 0,
+            "errors": {},
+        }
+    
+    async def _finalize_broadcast_results(
+        self, 
+        results: Dict[str, Any], 
+        start_time: datetime, 
+        admin_id: int, 
+        target_type: str, 
+        message_text: Optional[str]
+    ) -> Dict[str, Any]:
+        """Broadcast natijalarini yakunlash"""
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        logger.info(
+            f"Broadcast yakunlandi: "
+            f"{results['success_count']}/{results['total_count']} muvaffaqiyatli. "
+            f"Vaqt: {duration:.2f}s",
+        )
+        
+        await self._log_broadcast_result(
+            admin_id=admin_id,
+            target_type=target_type,
+            message_text=message_text[:100] if message_text else "Media",
+            results=results,
+            duration=duration,
+        )
+        
+        results["success"] = True
+        results["duration"] = duration
+        return results
+    
     async def broadcast_message(
         self,
         bot: Bot,
@@ -34,77 +85,31 @@ class BroadcastService:
     ) -> Dict[str, Any]:
         """Broadcast xabar yuborish"""
         try:
-            # Foydalanuvchilarni olish
             users = await self._get_target_users(target_type)
-
             if not users:
-                return {
-                    "success": False,
-                    "message": "Foydalanuvchilar topilmadi",
-                    "total_count": 0,
-                    "success_count": 0,
-                    "failed_count": 0,
-                }
-
-            # Broadcast natijalarini tracking qilish
-            results: Dict[str, Any] = {
-                "total_count": len(users),
-                "success_count": 0,
-                "failed_count": 0,
-                "blocked_count": 0,
-                "retry_count": 0,
-                "errors": {},
-            }
-
-            # Xabar yuborishni boshlash
+                return self._create_empty_result()
+            
+            results = self._create_initial_results(len(users))
             start_time = datetime.now()
-            logger.info(
-                f"Broadcast boshlandi: {results['total_count']} foydalanuvchiga",
-            )
-
-            # Batch'lar bo'yicha yuborish (30ta bir vaqtda)
-            batch_size = 30
+            
+            logger.info(f"Broadcast boshlandi: {results['total_count']} foydalanuvchiga")
+            
             await self._process_batches(
                 bot=bot,
                 users=users,
                 message_text=message_text,
                 message_object=message_object,
                 results=results,
-                batch_size=batch_size,
+                batch_size=30,
             )
-
-            # Natijalarni logging qilish
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-
-            logger.info(
-                f"Broadcast yakunlandi: "
-                f"{results['success_count']}/{results['total_count']} muvaffaqiyatli. "
-                f"Vaqt: {duration:.2f}s",
+            
+            return await self._finalize_broadcast_results(
+                results, start_time, admin_id, target_type, message_text
             )
-
-            # Natijalarni ma'lumotlar bazasiga saqlash
-            await self._log_broadcast_result(
-                admin_id=admin_id,
-                target_type=target_type,
-                message_text=message_text[:100] if message_text else "Media",
-                results=results,
-                duration=duration,
-            )
-
-            results["success"] = True
-            results["duration"] = duration
-            return results
-
+            
         except Exception as e:
             logger.error(f"Broadcast'da umumiy xato: {e}")
-            return {
-                "success": False,
-                "message": f"Xato: {str(e)}",
-                "total_count": 0,
-                "success_count": 0,
-                "failed_count": 0,
-            }
+            return self._create_empty_result(f"Xato: {str(e)}")
 
     async def _process_batches(
         self,

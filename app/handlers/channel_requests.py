@@ -198,6 +198,68 @@ async def handle_channel_request_input(message: Message, state: FSMContext):
         await state.clear()
 
 
+def _get_pagination_data(requests, per_page, page):
+    """Pagination ma'lumotlarini hisoblash"""
+    has_next = len(requests) > per_page
+    if has_next:
+        requests = requests[:per_page]
+    has_prev = page > 1
+    return requests, has_next, has_prev
+
+
+def _format_single_request(req, idx, status_map):
+    """Bitta so'rovni formatlash"""
+    channel_name = req.get('channel_title') or req.get('channel_username') or f"ID: {req.get('channel_id')}"
+    status = req.get('status', 'pending')
+    status_label = status_map.get(status, status.capitalize())
+    request_date = req.get('request_date', '')
+    
+    lines = [
+        f"\n{idx}. <b>{channel_name}</b>\n"
+        f"   {status_label}\n"
+        f"   📅 {request_date[:16] if request_date else '—'}"
+    ]
+    
+    if status != 'pending':
+        reviewer = req.get('reviewed_by')
+        review_date = req.get('review_date')
+        reviewed_comment = req.get('review_comment')
+        
+        if reviewer:
+            lines.append(f"   👤 Admin: <code>{reviewer}</code>")
+        if review_date:
+            lines.append(f"   🕒 {review_date[:16]}")
+        if reviewed_comment:
+            lines.append(f"   💬 Izoh: {reviewed_comment}")
+    
+    return lines
+
+
+def _build_requests_text(requests, offset):
+    """So'rovlar ro'yxati matnini yaratish"""
+    if not requests:
+        return (
+            "📊 <b>Sizning so'rovlaringiz</b>\n\n"
+            "Hozircha kanal so'rovlari topilmadi.\n\n"
+            "📌 Yangi kanal qo'shish uchun '📢 Kanal qo'shish so'rovi' tugmasini bosing."
+        )
+    
+    lines = ["📊 <b>Sizning so'rovlaringiz</b>"]
+    status_map = {
+        "pending": "⏳ Kutilmoqda",
+        "approved": "✅ Tasdiqlangan",
+        "rejected": "❌ Rad etilgan"
+    }
+    
+    for idx, req in enumerate(requests, start=offset + 1):
+        request_lines = _format_single_request(req, idx, status_map)
+        lines.extend(request_lines)
+    
+    text = "\n".join(lines)
+    text += "\n\nℹ️ Yangi so'rov yuborganingizdan so'ng natijasi shu yerda ko'rinadi."
+    return text
+
+
 async def show_my_requests(callback: CallbackQuery, user_id: int, page: int = 1):
     """Foydalanuvchining so'rovlarini ko'rsatish"""
     try:
@@ -205,52 +267,11 @@ async def show_my_requests(callback: CallbackQuery, user_id: int, page: int = 1)
         per_page = 5
         offset = (page - 1) * per_page
         requests = await db.channels.get_user_requests(user_id, limit=per_page + 1, offset=offset)
-        has_next = len(requests) > per_page
-        if has_next:
-            requests = requests[:per_page]
-        has_prev = page > 1
         
-        if not requests:
-            text = (
-                "📊 <b>Sizning so'rovlaringiz</b>\n\n"
-                "Hozircha kanal so'rovlari topilmadi.\n\n"
-                "📌 Yangi kanal qo'shish uchun '📢 Kanal qo'shish so'rovi' tugmasini bosing."
-            )
-        else:
-            lines = ["📊 <b>Sizning so'rovlaringiz</b>"]
-            status_map = {
-                "pending": "⏳ Kutilmoqda",
-                "approved": "✅ Tasdiqlangan",
-                "rejected": "❌ Rad etilgan"
-            }
-            for idx, req in enumerate(requests, start=offset + 1):
-                channel_name = req.get('channel_title') or req.get('channel_username') or f"ID: {req.get('channel_id')}"
-                status = req.get('status', 'pending')
-                status_label = status_map.get(status, status.capitalize())
-                request_date = req.get('request_date', '')
-                reviewed_comment = req.get('review_comment')
-                review_date = req.get('review_date')
-                lines.append(
-                    (
-                        f"\n{idx}. <b>{channel_name}</b>\n"
-                        f"   {status_label}\n"
-                        f"   📅 {request_date[:16] if request_date else '—'}"
-                    )
-                )
-                if status != 'pending':
-                    reviewer = req.get('reviewed_by')
-                    review_line = f"   👤 Admin: <code>{reviewer}</code>" if reviewer else ""
-                    date_line = f"   🕒 {review_date[:16]}" if review_date else ""
-                    if review_line:
-                        lines.append(review_line)
-                    if date_line:
-                        lines.append(date_line)
-                    if reviewed_comment:
-                        lines.append(f"   💬 Izoh: {reviewed_comment}")
-            text = "\n".join(lines)
-            text += "\n\nℹ️ Yangi so'rov yuborganingizdan so'ng natijasi shu yerda ko'rinadi."
-        
+        requests, has_next, has_prev = _get_pagination_data(requests, per_page, page)
+        text = _build_requests_text(requests, offset)
         keyboard = UserKeyboards.user_requests_navigation(page, has_prev, has_next)
+        
         await callback.message.edit_text(text, reply_markup=keyboard)
         
     except Exception as e:
