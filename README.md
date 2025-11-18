@@ -14,13 +14,36 @@ Zamonaviy modular arxitekturada yaratilgan Telegram bot. Foydalanuvchilar audio 
 
 ## 🚀 O'rnatish
 
-### 1. Repository'ni klonlash
+### Avtomatik O'rnatish (Tavsiya etiladi)
+
+**Windows uchun:**
+```cmd
+# Repository'ni klonlash
+git clone https://github.com/yourusername/AudioToVoiceBot.git
+cd AudioToVoiceBot
+
+# Avtomatik setup (FFmpeg + Python requirements)
+setup.bat
+```
+
+**Yoki Python orqali:**
+```bash
+git clone https://github.com/yourusername/AudioToVoiceBot.git
+cd AudioToVoiceBot
+python install_requirements.py
+```
+
+### Manual O'rnatish
+
+#### 1. Repository'ni klonlash
+
 ```bash
 git clone https://github.com/yourusername/AudioToVoiceBot.git
 cd AudioToVoiceBot
 ```
 
-### 2. Virtual environment yaratish
+#### 2. Virtual environment yaratish
+
 ```bash
 python -m venv venv
 
@@ -31,25 +54,25 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 3. Paketlarni o'rnatish
+#### 3. Python paketlarni o'rnatish
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Environment o'rnatish
-```bash
-# .env.example faylini .env ga ko'chiring
-cp .env.example .env
+#### 4. FFmpeg o'rnatish
 
-# .env faylini o'z ma'lumotlaringiz bilan to'ldiring
+**Windows (Avtomatik):**
+```bash
+python setup_ffmpeg.py
 ```
 
-### 5. FFmpeg o'rnatish
-**Windows:**
-1. [FFmpeg](https://ffmpeg.org/download.html) saytidan yuklab oling
-2. PATH'ga qo'shing
+**Windows (Manual):**
+```cmd
+winget install ffmpeg
+```
 
-**Linux (Ubuntu/Debian):**
+**Linux:**
 ```bash
 sudo apt update
 sudo apt install ffmpeg
@@ -58,6 +81,15 @@ sudo apt install ffmpeg
 **macOS:**
 ```bash
 brew install ffmpeg
+```
+
+#### 5. Environment o'rnatish
+
+```bash
+# .env.example faylini .env ga ko'chiring
+cp .env.example .env
+
+# .env faylini o'z ma'lumotlaringiz bilan to'ldiring
 ```
 
 ## ⚙️ Konfiguratsiya
@@ -78,13 +110,15 @@ SUPPORTED_AUDIO_FORMATS=mp3,wav,ogg,m4a,flac,aac
 ```
 
 ### Bot Token Olish
-1. [@BotFather](https://t.me/botfather) ga yozing
-2. `/newbot` buyrug'ini yuboring
-3. Bot nomini kiriting
-4. Username kiriting
-5. Tokenni oling va `.env` ga joylashtiring
+
+1. [ ] [@BotFather](https://t.me/botfather) ga yozing
+2. [ ] `/newbot` buyrug'ini yuboring
+3. [ ] Bot nomini kiriting
+4. [ ] Username kiriting
+5. [ ] Tokenni oling va `.env` ga joylashtiring
 
 ### Admin ID Olish
+
 1. [@userinfobot](https://t.me/userinfobot) ga yozing
 2. `/start` ni bosing
 3. ID raqamingizni oling
@@ -92,11 +126,13 @@ SUPPORTED_AUDIO_FORMATS=mp3,wav,ogg,m4a,flac,aac
 ## 🏃‍♂️ Ishga Tushirish
 
 ### Development rejimida
+
 ```bash
 python main.py
 ```
 
 ### Production rejimida
+
 ```bash
 # systemd service yarating (Linux)
 sudo cp deploy/audiobot.service /etc/systemd/system/
@@ -128,17 +164,20 @@ AudioToVoiceBot/
 ## 🔧 Foydalanish
 
 ### Oddiy foydalanuvchi:
+
 1. Botni ishga tushiring: `/start`
 2. Audio faylni yuboring
 3. Voice message formatida qaytarib oling
 
 ### Admin funksiyalari:
+
 - `/admin` - Admin panel
 - `/stats` - Statistikalar
 - `/channels` - Majburiy kanallar boshqaruvi
 - `/users` - Foydalanuvchilar ro'yxati
 
 ### Majburiy obuna:
+
 1. Botni kanal/guruhga admin sifatida qo'shing
 2. Admin paneldan kanalni majburiy obunaga qo'shing
 3. Foydalanuvchilar obuna bo'lmagunicha botdan foydalana olmaydi
@@ -159,6 +198,7 @@ pytest tests/test_audio_service.py
 ## 📊 Statistika
 
 Bot quyidagi statistikalarni kuzatib boradi:
+
 - Jami foydalanuvchilar soni
 - Kunlik faol foydalanuvchilar
 - Audio konversiyalar soni
@@ -168,16 +208,19 @@ Bot quyidagi statistikalarni kuzatib boradi:
 ## 🛠️ Development
 
 ### Yangi modul qo'shish:
+
 1. `app/` papkasida yangi papka yarating
 2. `__init__.py` faylini qo'shing
 3. `main.py` da import qiling
 
 ### Yangi handler qo'shish:
+
 1. `app/handlers/` da yangi fayl yarating
 2. Handler'ni yozing
 3. `app/handlers/__init__.py` da import qiling
 
 ### Yangi service qo'shish:
+
 1. `app/services/` da yangi fayl yarating
 2. Business logikani yozing
 3. Handler'larda ishlatning
@@ -195,12 +238,14 @@ Bot quyidagi statistikalarni kuzatib boradi:
 ### Keng uchraydigan muammolar:
 
 **FFmpeg topilmaydi:**
+
 ```bash
 # PATH ga qo'shing yoki to'liq path ko'rsating
 FFMPEG_PATH=/usr/bin/ffmpeg
 ```
 
 **Database xatosi:**
+
 ```bash
 # Ma'lumotlar bazasini qayta yarating
 rm data/bot.db
@@ -208,6 +253,7 @@ python -c "from app.database import init_db; init_db()"
 ```
 
 **Audio konversiya xatosi:**
+
 - Fayl hajmini tekshiring (50MB gacha)
 - Audio format qo'llab-quvvatlanishini tekshiring
 - FFmpeg o'rnatilganligini tekshiring
@@ -215,6 +261,7 @@ python -c "from app.database import init_db; init_db()"
 ## 📝 Changelog
 
 ### v1.0.0 (2025-11-17)
+
 - Asosiy audio-voice konversiya
 - Majburiy obuna tizimi
 - Admin panel
