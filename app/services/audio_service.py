@@ -66,6 +66,7 @@ class AudioProcessor:
             )
             
             if not success:
+                await self._cleanup_temp_files([temp_output_path])
                 return False, error_msg, None
             
             # Metadata yaratish
@@ -107,11 +108,12 @@ class AudioProcessor:
             except Exception as db_error:
                 logger.error(f"Ma'lumotlar bazasiga xato yozishda muammo: {db_error}")
             
+            await self._cleanup_temp_files([temp_output_path])
             return False, error_msg, None
             
         finally:
-            # Vaqtinchalik fayllarni tozalash
-            await self._cleanup_temp_files([temp_input_path, temp_output_path])
+            # Foydalanuvchi yuborib bo'lgandan so'ng chiqish fayli o'chiriladi
+            await self._cleanup_temp_files([temp_input_path])
     
     async def _convert_to_voice(self, input_path: str, output_path: str) -> Tuple[bool, Optional[str]]:
         """Audio faylni voice formatiga o'tkazish FFmpeg orqali"""
@@ -120,11 +122,14 @@ class AudioProcessor:
             cmd = [
                 'ffmpeg',
                 '-i', input_path,
+                '-vn',
                 '-ac', '1',  # Mono
                 '-ar', '48000',  # 48kHz sample rate
                 '-c:a', 'libopus',  # Opus codec
                 '-b:a', '64k',  # 64kbps bitrate
                 '-vbr', 'on',  # Variable bitrate
+                '-map_metadata', '-1',
+                '-f', 'ogg',
                 '-y',  # Overwrite output file
                 output_path
             ]

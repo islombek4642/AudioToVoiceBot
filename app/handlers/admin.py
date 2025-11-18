@@ -6,6 +6,8 @@ from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import math
+import aiosqlite
+from pathlib import Path
 
 from app.core.config import config
 from app.core.logging import get_logger
@@ -215,17 +217,23 @@ async def handle_stats_callbacks(callback: CallbackQuery, data: str):
     db = get_database()
     
     if data == "stats_general":
-        logger.info("Umumiy statistika funksiyasi chaqirildi")
+        logger.info("Umumiy statistika chaqirildi")
         await show_general_stats(callback, db)
     elif data == "stats_users":
         logger.info("Foydalanuvchilar statistikasi chaqirildi")
         await show_user_stats(callback, db)
     elif data == "stats_conversions":
-        logger.info("Konversiya statistikasi chaqirildi")
+        logger.info("Konversiyalar statistikasi chaqirildi")
         await show_conversion_stats(callback, db)
     elif data == "stats_today":
         logger.info("Bugungi statistika chaqirildi")
         await show_today_stats(callback, db)
+    elif data == "stats_week":
+        logger.info("Haftalik statistika chaqirildi")
+        await show_week_stats(callback, db)
+    elif data == "stats_channels":
+        logger.info("Kanal statistikasi chaqirildi")
+        await show_channels_stats(callback)
     elif data == "stats_refresh":
         logger.info("Statistika yangilash chaqirildi")
         await show_stats_menu(callback)
@@ -264,23 +272,19 @@ async def show_user_stats(callback: CallbackQuery, db):
     try:
         total_users = await db.statistics.get_user_count()
         active_users = await db.statistics.get_active_users_today()
-        
-        # Haftalik statistika
-        week_ago = datetime.now() - timedelta(days=7)
-        
-        text = f"""
-👥 <b>Foydalanuvchilar statistikasi</b>
+        active_ratio = (active_users / total_users * 100) if total_users else 0
 
-📊 <b>Umumiy:</b>
-• Jami: {total_users}
-• Bugun faol: {active_users}
-• Faol foiz: {(active_users/total_users*100):.1f}% (agar {total_users} > 0 else 0)
-
-📅 <b>Sana:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}
-        """
+        text = (
+            "👥 <b>Foydalanuvchilar statistikasi</b>\n\n"
+            "📊 <b>Umumiy:</b>\n"
+            f"• Jami: {total_users}\n"
+            f"• Bugun faol: {active_users}\n"
+            f"• Faol foiz: {active_ratio:.1f}%\n\n"
+            f"📅 <b>Sana:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
         
         await callback.message.edit_text(
-            text.strip(),
+            text,
             reply_markup=AdminKeyboards.stats_menu()
         )
         
@@ -344,6 +348,41 @@ async def show_today_stats(callback: CallbackQuery, db):
         await callback.answer("❌ Statistika olishda xato!", show_alert=True)
 
 
+async def show_week_stats(callback: CallbackQuery, db):
+    """Haftalik statistika"""
+    try:
+        today = datetime.now().date()
+        week_ago = today - timedelta(days=7)
+        async with aiosqlite.connect(db.manager.db_path) as conn:
+            cursor = await conn.execute(
+                '''
+                SELECT COUNT(DISTINCT user_id) FROM user_activity
+                WHERE DATE(timestamp) BETWEEN ? AND ?
+                ''', (str(week_ago), str(today))
+            )
+            active_week = (await cursor.fetchone())[0]
+
+        total_users = await db.statistics.get_user_count()
+        text = f"""
+📅 <b>Haftalik statistika</b>
+
+👥 <b>Aktiv foydalanuvchilar:</b> {active_week}
+👥 <b>Jami foydalanuvchilar:</b> {total_users}
+📈 <b>Faollik:</b> {(active_week/total_users*100 if total_users else 0):.1f}%
+
+⏰ <b>Oraliq:</b> {week_ago.strftime('%d.%m.%Y')} - {today.strftime('%d.%m.%Y')}
+        """
+
+        await callback.message.edit_text(
+            text.strip(),
+            reply_markup=AdminKeyboards.stats_menu()
+        )
+
+    except Exception as e:
+        logger.error(f"Week stats'da xato: {e}")
+        await callback.answer("❌ Statistika olishda xato!", show_alert=True)
+
+
 # FOYDALANUVCHILAR HANDLERS
 async def handle_users_callbacks(callback: CallbackQuery, data: str, state: FSMContext):
     """Foydalanuvchilar callback'larini boshqarish"""
@@ -358,6 +397,12 @@ async def handle_users_callbacks(callback: CallbackQuery, data: str, state: FSMC
     elif data == "users_active":
         logger.info("Faol foydalanuvchilar chaqirildi")
         await show_active_users(callback)
+    elif data == "users_blocked":
+        logger.info("Bloklangan foydalanuvchilar chaqirildi")
+        await show_blocked_users(callback)
+    elif data == "users_admins":
+        logger.info("Adminlar ro'yxati chaqirildi")
+        await show_admin_users(callback)
     elif data == "users_stats":
         logger.info("Foydalanuvchilar statistikasi chaqirildi")
         await show_user_stats(callback, get_database())
@@ -412,6 +457,66 @@ async def show_active_users(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Active users'da xato: {e}")
+        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+
+
+async def show_blocked_users(callback: CallbackQuery):
+    """Bloklangan foydalanuvchilar ro'yxati"""
+    db = get_database()
+    try:
+        users = await db.users.get_users_by_status("blocked", limit=50)
+        if not users:
+            await callback.message.edit_text(
+                "🚫 Bloklangan foydalanuvchilar topilmadi.",
+                reply_markup=AdminKeyboards.users_menu()
+            )
+            return
+
+        text = "🚫 <b>Bloklangan foydalanuvchilar</b>\n\n"
+        for user in users[:10]:
+            username = f"@{user['username']}" if user['username'] else "Username yo'q"
+            text += (
+                f"🚫 <b>{user['first_name']}</b> ({username})\n"
+                f"   🆔 <code>{user['user_id']}</code>\n"
+                f"   📅 {user['last_activity'][:16] if user.get('last_activity') else '—'}\n\n"
+            )
+
+        await callback.message.edit_text(
+            text.strip(),
+            reply_markup=AdminKeyboards.users_menu()
+        )
+    except Exception as e:
+        logger.error(f"Blocked users'da xato: {e}")
+        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+
+
+async def show_admin_users(callback: CallbackQuery):
+    """Admin foydalanuvchilar ro'yxati"""
+    db = get_database()
+    try:
+        admins = await db.users.get_admin_users(limit=50)
+        if not admins:
+            await callback.message.edit_text(
+                "👑 Adminlar ro'yxati bo'sh.",
+                reply_markup=AdminKeyboards.users_menu()
+            )
+            return
+
+        text = "👑 <b>Admin foydalanuvchilar</b>\n\n"
+        for admin in admins:
+            username = f"@{admin['username']}" if admin['username'] else "Username yo'q"
+            text += (
+                f"👑 <b>{admin['first_name']}</b> ({username})\n"
+                f"   🆔 <code>{admin['user_id']}</code>\n"
+                f"   📅 {admin['registration_date'][:10]}\n\n"
+            )
+
+        await callback.message.edit_text(
+            text.strip(),
+            reply_markup=AdminKeyboards.users_menu()
+        )
+    except Exception as e:
+        logger.error(f"Admin users'da xato: {e}")
         await callback.answer("❌ Xato yuz berdi.", show_alert=True)
 
 
@@ -896,7 +1001,7 @@ async def handle_channel_id_input(message: Message, state: FSMContext):
 
         if channel_input.startswith('@'):
             channel_username = channel_input.replace('@', '')
-            chat = await message.bot.get_chat(channel_username)
+            chat = await message.bot.get_chat(channel_input)
             channel_id = chat.id
         else:
             channel_id = int(channel_input)
@@ -978,9 +1083,10 @@ async def handle_broadcast_message_input(message: Message, state: FSMContext):
                 f"⏱ Vaqt: {result.get('duration', 0):.2f}s"
             )
         else:
+            failure_reason = result.get('message', "Noma'lum xato")
             summary = (
                 "❌ Broadcast muvaffaqiyatsiz bo'ldi.\n"
-                f"Sabab: {result.get('message', 'Noma'lum xato')}"
+                f"Sabab: {failure_reason}"
             )
 
         await message.answer(summary)
@@ -998,8 +1104,18 @@ async def cancel_handler(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     
+    data = await state.get_data()
+    current_state = await state.get_state()
     await state.clear()
-    await message.answer("❌ Amal bekor qilindi.")
+
+    if current_state == AdminStates.waiting_channel_id.state:
+        await message.answer("❌ Kanal qo'shish bekor qilindi.", reply_markup=AdminKeyboards.channels_menu())
+    elif current_state == AdminStates.waiting_broadcast_message.state:
+        await message.answer("❌ Broadcast bekor qilindi.", reply_markup=AdminKeyboards.broadcast_menu())
+    elif current_state == AdminStates.waiting_user_search.state:
+        await message.answer("❌ Qidiruv bekor qilindi.", reply_markup=AdminKeyboards.users_menu())
+    else:
+        await message.answer("❌ Amal bekor qilindi.")
 
 
 # ADMIN COMMAND HANDLERS
@@ -1110,9 +1226,13 @@ async def backup_command_handler(message: Message):
         import os
         from datetime import datetime
         
+        # Backup katalogi
+        backup_dir = Path('data') / 'backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
         # Backup fayl nomini yaratish
         backup_filename = f"bot_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-        backup_path = os.path.join('data', backup_filename)
+        backup_path = backup_dir / backup_filename
         
         # Ma'lumotlar bazasini backup qilish
         if os.path.exists(config.DATABASE_URL):
@@ -1127,7 +1247,7 @@ async def backup_command_handler(message: Message):
 📅 <b>Vaqt:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 📊 <b>Hajm:</b> {os.path.getsize(backup_path) / 1024:.1f} KB
 
-📌 <b>Joylashuv:</b> <code>data/{backup_filename}</code>
+📌 <b>Joylashuv:</b> <code>{backup_path.as_posix()}</code>
             """
             
             await message.answer(backup_text.strip())

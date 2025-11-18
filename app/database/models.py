@@ -209,6 +209,26 @@ class UserRepository:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
+    async def get_users_by_status(self, status: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                'SELECT * FROM users WHERE status = ? ORDER BY last_activity DESC LIMIT ? OFFSET ?',
+                (status, limit, offset)
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_admin_users(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                'SELECT * FROM users WHERE is_admin = 1 ORDER BY registration_date DESC LIMIT ? OFFSET ?',
+                (limit, offset)
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
 
 class ChannelRepository:
     def __init__(self, db_manager: DatabaseManager):
