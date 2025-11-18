@@ -1,5 +1,6 @@
 from aiogram import Dispatcher, F
 from aiogram.types import Message, BufferedInputFile
+import aiofiles
 
 from app.core.logging import get_logger
 from app.services.audio_service import audio_service
@@ -38,8 +39,8 @@ async def audio_document_handler(message: Message):
             
             if success and voice_file_path:
                 # Voice faylni yuborish
-                with open(voice_file_path, 'rb') as voice_file:
-                    voice_data = voice_file.read()
+                async with aiofiles.open(voice_file_path, 'rb') as voice_file:
+                    voice_data = await voice_file.read()
                 
                 voice_input = BufferedInputFile(voice_data, filename="voice.ogg")
                 
@@ -94,8 +95,8 @@ async def audio_file_handler(message: Message):
             
             if success and voice_file_path:
                 # Voice faylni yuborish
-                with open(voice_file_path, 'rb') as voice_file:
-                    voice_data = voice_file.read()
+                async with aiofiles.open(voice_file_path, 'rb') as voice_file:
+                    voice_data = await voice_file.read()
                 
                 voice_input = BufferedInputFile(voice_data, filename="voice.ogg")
                 

@@ -9,6 +9,11 @@ from app.core.logging import get_logger
 from app.database.database import get_database
 from app.services.force_subscribe import force_subscribe_service
 from app.utils.keyboards import UserKeyboards, AdminKeyboards
+from app.utils.messages import (
+    MSG_GENERIC_ERROR,
+    MSG_GENERIC_ERROR_BANG,
+    MSG_USERNAME_MISSING,
+)
 
 logger = get_logger(__name__)
 
@@ -35,7 +40,7 @@ async def request_channel_handler(message: Message):
         
     except Exception as e:
         logger.error(f"Request channel handler'da xato: {e}")
-        await message.reply("❌ Xato yuz berdi.")
+        await message.reply(MSG_GENERIC_ERROR)
 
 
 async def request_channel_callback(callback: CallbackQuery, state: FSMContext):
@@ -64,7 +69,7 @@ async def request_channel_callback(callback: CallbackQuery, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Request callback'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def start_channel_request(callback: CallbackQuery, state: FSMContext):
@@ -104,7 +109,7 @@ async def handle_channel_request_input(message: Message, state: FSMContext):
         # Ma'lumotlarni parsing qilish
         channel_info = lines[0].strip()
         channel_name = lines[1].strip()
-        description = lines[2].strip() if len(lines) > 2 else ""
+        
         invite_link = lines[3].strip() if len(lines) > 3 else ""
         
         # Kanal ID yoki username'ni aniqlash
@@ -230,7 +235,7 @@ async def show_my_requests(callback: CallbackQuery, user_id: int, page: int = 1)
         
     except Exception as e:
         logger.error(f"My requests'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_request_help(callback: CallbackQuery):
@@ -272,7 +277,7 @@ async def notify_admin_about_request(bot, request_data, user):
         
         channel_name = request_data['channel_title']
         channel_id = request_data['channel_id']
-        username = f"@{user.username}" if user.username else "Username yo'q"
+        username = f"@{user.username}" if user.username else MSG_USERNAME_MISSING
         
         admin_text = f"""
 🔔 <b>Yangi kanal so'rovi!</b>
@@ -344,7 +349,7 @@ async def handle_request_approval(callback: CallbackQuery, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Request approval'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi!", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR_BANG, show_alert=True)
 
 
 async def handle_admin_comment_input(message: Message, state: FSMContext):
@@ -383,7 +388,7 @@ async def handle_admin_comment_input(message: Message, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Admin comment'da xato: {e}")
-        await message.reply("❌ Xato yuz berdi.")
+        await message.reply(MSG_GENERIC_ERROR)
         await state.clear()
 
 
@@ -478,7 +483,7 @@ async def show_request_details(callback: CallbackQuery, request_id: int, db):
         
     except Exception as e:
         logger.error(f"Request details'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi!", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR_BANG, show_alert=True)
 
 
 def register_channel_request_handlers(dp: Dispatcher):

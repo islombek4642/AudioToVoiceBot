@@ -6,6 +6,7 @@ from datetime import datetime
 from app.core.config import config
 from app.core.logging import get_logger
 from app.database.database import get_database
+from app.utils.messages import UNKNOWN_TEXT
 
 logger = get_logger(__name__)
 
@@ -127,11 +128,11 @@ async def settings_handler(message: Message):
         try:
             user_data = await db.users.get_user_by_id(user_id)
             if user_data:
-                reg_date = user_data.get('registration_date', 'Noma\'lum')
-                if reg_date and reg_date != 'Noma\'lum':
+                reg_date = user_data.get('registration_date', UNKNOWN_TEXT)
+                if reg_date and reg_date != UNKNOWN_TEXT:
                     reg_date = reg_date[:10]  # Faqat sana
-                last_activity = user_data.get('last_activity', 'Noma\'lum')
-                if last_activity and last_activity != 'Noma\'lum':
+                last_activity = user_data.get('last_activity', UNKNOWN_TEXT)
+                if last_activity and last_activity != UNKNOWN_TEXT:
                     last_activity = last_activity[:16]  # Sana va vaqt
             else:
                 reg_date = 'Bugun'
@@ -151,7 +152,7 @@ async def settings_handler(message: Message):
         settings_text = f"""
 ⚙️ <b>Sozlamalar</b>
 
-👤 <b>Foydalanuvchi:</b> {message.from_user.first_name or 'Noma\'lum'}
+👤 <b>Foydalanuvchi:</b> {message.from_user.first_name or UNKNOWN_TEXT}
 🆔 <b>ID:</b> <code>{user_id}</code>
 🌐 <b>Til:</b> {message.from_user.language_code or 'uz'}
 
@@ -181,7 +182,7 @@ Botdan bepul foydalanishingiz mumkin. Barcha audio fayllaringiz xavfsiz qayta is
         settings_text = f"""
 ⚙️ <b>Sozlamalar</b>
 
-👤 <b>Foydalanuvchi:</b> {message.from_user.first_name or 'Noma\'lum'}
+👤 <b>Foydalanuvchi:</b> {message.from_user.first_name or UNKNOWN_TEXT}
 🆔 <b>ID:</b> <code>{message.from_user.id}</code>
 🌐 <b>Til:</b> {message.from_user.language_code or 'uz'}
 

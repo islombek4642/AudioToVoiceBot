@@ -6,6 +6,7 @@ from datetime import datetime
 from aiogram import Bot
 from aiogram.types import Message
 from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest
+import aiofiles
 
 from app.core.logging import get_logger
 from app.database.database import get_database
@@ -236,9 +237,10 @@ class BroadcastService:
                 "timestamp": datetime.now().strftime('%d.%m.%Y %H:%M')
             }
 
-            history = self._read_history()
+            history = await self._read_history_async()
             history.append(entry)
-            self.history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+            async with aiofiles.open(self.history_file, mode="w", encoding="utf-8") as f:
+                await f.write(json.dumps(history, ensure_ascii=False, indent=2))
             logger.info(
                 f"Broadcast result saved: admin={admin_id}, target={target_type}, "
                 f"total={results['total_count']}, success={results['success_count']}"
@@ -250,7 +252,7 @@ class BroadcastService:
     async def get_broadcast_stats(self) -> Dict[str, Any]:
         """Broadcast statistikasini olish"""
         try:
-            history = self._read_history()
+            history = await self._read_history_async()
             if not history:
                 return {
                     "total_broadcasts": 0,
@@ -277,13 +279,14 @@ class BroadcastService:
     async def cancel_broadcast(self, broadcast_id: str) -> bool:
         """Broadcast'ni to'xtatish (agar async bo'lsa)"""
         try:
-            history = self._read_history()
+            history = await self._read_history_async()
             history.append({
                 "id": broadcast_id,
                 "canceled": True,
                 "timestamp": datetime.now().strftime('%d.%m.%Y %H:%M')
             })
-            self.history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+            async with aiofiles.open(self.history_file, mode="w", encoding="utf-8") as f:
+                await f.write(json.dumps(history, ensure_ascii=False, indent=2))
             logger.info(f"Broadcast {broadcast_id} to'xtatildi")
             return True
         except Exception as e:
@@ -294,6 +297,14 @@ class BroadcastService:
         try:
             data = self.history_file.read_text(encoding="utf-8")
             return json.loads(data)
+        except Exception:
+            return []
+
+    async def _read_history_async(self) -> List[Dict[str, Any]]:
+        try:
+            async with aiofiles.open(self.history_file, mode="r", encoding="utf-8") as f:
+                data = await f.read()
+                return json.loads(data) if data else []
         except Exception:
             return []
 

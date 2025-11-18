@@ -141,7 +141,7 @@ class AudioProcessor:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            stdout, stderr = await process.communicate()
+            _, stderr = await process.communicate()
             
             if process.returncode == 0:
                 logger.debug(f"Audio muvaffaqiyatli konvert qilindi: {output_path}")

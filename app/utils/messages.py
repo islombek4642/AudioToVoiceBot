@@ -1,0 +1,6 @@
+MSG_NO_ADMIN_PERMISSION = "❌ Sizda admin huquqi yo'q."
+MSG_GENERIC_ERROR = "❌ Xato yuz berdi."
+MSG_GENERIC_ERROR_BANG = "❌ Xato yuz berdi!"
+MSG_STATS_ERROR = "❌ Statistika olishda xato!"
+MSG_USERNAME_MISSING = "Username yo'q"
+UNKNOWN_TEXT = "Noma'lum"

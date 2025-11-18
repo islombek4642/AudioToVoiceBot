@@ -3,6 +3,7 @@ from aiogram.types import CallbackQuery
 
 from app.core.logging import get_logger
 from app.services.force_subscribe import force_subscribe_service
+from app.utils.messages import MSG_GENERIC_ERROR
 
 logger = get_logger(__name__)
 
@@ -12,11 +13,11 @@ async def check_subscription_callback(callback: CallbackQuery):
     try:
         # Middleware allaqachon ishlov bergan
         # Bu yerda qo'shimcha logika qo'shish mumkin
-        pass
+        await callback.answer()
         
     except Exception as e:
         logger.error(f"Subscription callback'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 def register_force_subscribe_handlers(dp: Dispatcher):

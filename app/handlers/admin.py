@@ -15,6 +15,13 @@ from app.database.database import get_database
 from app.services.broadcast_service import broadcast_service
 from app.utils.keyboards import AdminKeyboards
 from app.services.force_subscribe import force_subscribe_service
+from app.utils.messages import (
+    MSG_NO_ADMIN_PERMISSION,
+    MSG_GENERIC_ERROR,
+    MSG_GENERIC_ERROR_BANG,
+    MSG_STATS_ERROR,
+    MSG_USERNAME_MISSING,
+)
 
 logger = get_logger(__name__)
 
@@ -37,7 +44,7 @@ async def admin_handler(message: Message):
     
     if not is_admin(message.from_user.id):
         logger.warning(f"Admin panel'ga ruxsatsiz kirish urinishi /admin orqali: {message.from_user.id}")
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
@@ -84,50 +91,38 @@ async def admin_callback_handler(callback: CallbackQuery, state: FSMContext):
     logger.info(f"Admin callback bosildi: '{data}' - User: {callback.from_user.id}")
     
     try:
-        if data == "admin_back":
-            logger.info("Admin back tugmasi bosildi")
-            await show_admin_main_menu(callback)
-        elif data == "admin_stats":
-            logger.info("Statistika tugmasi bosildi")
-            await show_stats_menu(callback)
-        elif data == "admin_users":
-            logger.info("Foydalanuvchilar tugmasi bosildi")
-            await show_users_menu(callback)
-        elif data == "admin_channels":
-            logger.info("Kanallar tugmasi bosildi")
-            await show_channels_menu(callback)
-        elif data == "admin_requests":
-            logger.info("So'rovlar tugmasi bosildi")
-            await show_requests_menu(callback)
-        elif data == "admin_broadcast":
-            logger.info("Broadcast tugmasi bosildi")
-            await show_broadcast_menu(callback)
-        elif data == "admin_exit":
-            logger.info("Admin panel chiqish tugmasi bosildi")
-            await callback.message.delete()
-            await callback.answer("Admin panel yopildi.")
-        
-        # Statistika bo'limi
-        elif data.startswith("stats_"):
+        exact_actions = {
+            "admin_back": show_admin_main_menu,
+            "admin_stats": show_stats_menu,
+            "admin_users": show_users_menu,
+            "admin_channels": show_channels_menu,
+            "admin_requests": show_requests_menu,
+            "admin_broadcast": show_broadcast_menu,
+            "admin_exit": None,
+        }
+        if data in exact_actions:
+            if data == "admin_exit":
+                logger.info("Admin panel chiqish tugmasi bosildi")
+                await callback.message.delete()
+                await callback.answer("Admin panel yopildi.")
+            else:
+                logger.info(f"Exact admin action: {data}")
+                await exact_actions[data](callback)
+            return
+
+        # Prefix-based routing
+        if data.startswith("stats_"):
             logger.info(f"Statistika bo'limi: {data}")
             await handle_stats_callbacks(callback, data)
-        
-        # Foydalanuvchilar bo'limi
         elif data.startswith("users_"):
             logger.info(f"Foydalanuvchilar bo'limi: {data}")
             await handle_users_callbacks(callback, data, state)
-        
-        # Kanallar bo'limi
         elif data.startswith("channels_"):
             logger.info(f"Kanallar bo'limi: {data}")
             await handle_channels_callbacks(callback, data, state)
-        
-        # So'rovlar bo'limi
         elif data.startswith("requests_"):
             logger.info(f"So'rovlar bo'limi: {data}")
             await handle_requests_callbacks(callback, data)
-        
-        # Broadcast bo'limi
         elif data.startswith("broadcast_"):
             logger.info(f"Broadcast bo'limi: {data}")
             await handle_broadcast_callbacks(callback, data, state)
@@ -136,7 +131,7 @@ async def admin_callback_handler(callback: CallbackQuery, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Admin callback'da xato: {e} - Data: {data}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 # MENU FUNCTIONS
@@ -216,28 +211,23 @@ async def handle_stats_callbacks(callback: CallbackQuery, data: str):
     logger.info(f"Stats callback ishga tushdi: {data}")
     db = get_database()
     
-    if data == "stats_general":
-        logger.info("Umumiy statistika chaqirildi")
-        await show_general_stats(callback, db)
-    elif data == "stats_users":
-        logger.info("Foydalanuvchilar statistikasi chaqirildi")
-        await show_user_stats(callback, db)
-    elif data == "stats_conversions":
-        logger.info("Konversiyalar statistikasi chaqirildi")
-        await show_conversion_stats(callback, db)
-    elif data == "stats_today":
-        logger.info("Bugungi statistika chaqirildi")
-        await show_today_stats(callback, db)
-    elif data == "stats_week":
-        logger.info("Haftalik statistika chaqirildi")
-        await show_week_stats(callback, db)
-    elif data == "stats_channels":
-        logger.info("Kanal statistikasi chaqirildi")
-        await show_channels_stats(callback)
-    elif data == "stats_refresh":
+    actions = {
+        "stats_general": lambda: show_general_stats(callback, db),
+        "stats_users": lambda: show_user_stats(callback, db),
+        "stats_conversions": lambda: show_conversion_stats(callback, db),
+        "stats_today": lambda: show_today_stats(callback, db),
+        "stats_week": lambda: show_week_stats(callback, db),
+        "stats_channels": lambda: show_channels_stats(callback),
+    }
+    if data == "stats_refresh":
         logger.info("Statistika yangilash chaqirildi")
         await show_stats_menu(callback)
         await callback.answer("🔄 Statistika yangilandi.")
+        return
+    action = actions.get(data)
+    if action:
+        logger.info(f"Stats action: {data}")
+        await action()
     else:
         logger.warning(f"Noma'lum stats callback: {data}")
 
@@ -290,7 +280,7 @@ async def show_user_stats(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"User stats'da xato: {e}")
-        await callback.answer("❌ Statistika olishda xato!", show_alert=True)
+        await callback.answer(MSG_STATS_ERROR, show_alert=True)
 
 
 async def show_conversion_stats(callback: CallbackQuery, db):
@@ -315,7 +305,7 @@ async def show_conversion_stats(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Conversion stats'da xato: {e}")
-        await callback.answer("❌ Statistika olishda xato!", show_alert=True)
+        await callback.answer(MSG_STATS_ERROR, show_alert=True)
 
 
 async def show_today_stats(callback: CallbackQuery, db):
@@ -345,7 +335,7 @@ async def show_today_stats(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Today stats'da xato: {e}")
-        await callback.answer("❌ Statistika olishda xato!", show_alert=True)
+        await callback.answer(MSG_STATS_ERROR, show_alert=True)
 
 
 async def show_week_stats(callback: CallbackQuery, db):
@@ -380,32 +370,25 @@ async def show_week_stats(callback: CallbackQuery, db):
 
     except Exception as e:
         logger.error(f"Week stats'da xato: {e}")
-        await callback.answer("❌ Statistika olishda xato!", show_alert=True)
+        await callback.answer(MSG_STATS_ERROR, show_alert=True)
 
 
 # FOYDALANUVCHILAR HANDLERS
 async def handle_users_callbacks(callback: CallbackQuery, data: str, state: FSMContext):
     """Foydalanuvchilar callback'larini boshqarish"""
     logger.info(f"Users callback ishga tushdi: {data}")
-    
-    if data == "users_list":
-        logger.info("Foydalanuvchilar ro'yxati chaqirildi")
-        await show_users_list(callback)
-    elif data == "users_search":
-        logger.info("Foydalanuvchi qidirish chaqirildi")
-        await start_user_search(callback, state)
-    elif data == "users_active":
-        logger.info("Faol foydalanuvchilar chaqirildi")
-        await show_active_users(callback)
-    elif data == "users_blocked":
-        logger.info("Bloklangan foydalanuvchilar chaqirildi")
-        await show_blocked_users(callback)
-    elif data == "users_admins":
-        logger.info("Adminlar ro'yxati chaqirildi")
-        await show_admin_users(callback)
-    elif data == "users_stats":
-        logger.info("Foydalanuvchilar statistikasi chaqirildi")
-        await show_user_stats(callback, get_database())
+    actions = {
+        "users_list": lambda: show_users_list(callback),
+        "users_search": lambda: start_user_search(callback, state),
+        "users_active": lambda: show_active_users(callback),
+        "users_blocked": lambda: show_blocked_users(callback),
+        "users_admins": lambda: show_admin_users(callback),
+        "users_stats": lambda: show_user_stats(callback, get_database()),
+    }
+    action = actions.get(data)
+    if action:
+        logger.info(f"Users action: {data}")
+        await action()
     else:
         logger.warning(f"Noma'lum users callback: {data}")
 
@@ -442,7 +425,7 @@ async def show_active_users(callback: CallbackQuery):
         text = f"👥 <b>Faol foydalanuvchilar</b> ({len(active_users)})\n\n"
         
         for i, user in enumerate(active_users[:10], 1):  # Faqat 10tasini ko'rsatish
-            username = f"@{user['username']}" if user['username'] else "Username yo'q"
+            username = f"@{user['username']}" if user['username'] else MSG_USERNAME_MISSING
             text += f"✅ <b>{user['first_name']}</b> ({username})\n"
             text += f"   🆔 <code>{user['user_id']}</code>\n"
             text += f"   📅 {user['registration_date'][:10]}\n\n"
@@ -457,7 +440,7 @@ async def show_active_users(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Active users'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_blocked_users(callback: CallbackQuery):
@@ -474,7 +457,7 @@ async def show_blocked_users(callback: CallbackQuery):
 
         text = "🚫 <b>Bloklangan foydalanuvchilar</b>\n\n"
         for user in users[:10]:
-            username = f"@{user['username']}" if user['username'] else "Username yo'q"
+            username = f"@{user['username']}" if user['username'] else MSG_USERNAME_MISSING
             text += (
                 f"🚫 <b>{user['first_name']}</b> ({username})\n"
                 f"   🆔 <code>{user['user_id']}</code>\n"
@@ -487,7 +470,7 @@ async def show_blocked_users(callback: CallbackQuery):
         )
     except Exception as e:
         logger.error(f"Blocked users'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_admin_users(callback: CallbackQuery):
@@ -504,7 +487,7 @@ async def show_admin_users(callback: CallbackQuery):
 
         text = "👑 <b>Admin foydalanuvchilar</b>\n\n"
         for admin in admins:
-            username = f"@{admin['username']}" if admin['username'] else "Username yo'q"
+            username = f"@{admin['username']}" if admin['username'] else MSG_USERNAME_MISSING
             text += (
                 f"👑 <b>{admin['first_name']}</b> ({username})\n"
                 f"   🆔 <code>{admin['user_id']}</code>\n"
@@ -517,7 +500,7 @@ async def show_admin_users(callback: CallbackQuery):
         )
     except Exception as e:
         logger.error(f"Admin users'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_users_list(callback: CallbackQuery, page: int = 1):
@@ -542,7 +525,7 @@ async def show_users_list(callback: CallbackQuery, page: int = 1):
         
         for i, user in enumerate(users, 1):
             status_emoji = "✅" if user['status'] == 'active' else "🚫"
-            username = f"@{user['username']}" if user['username'] else "Username yo'q"
+            username = f"@{user['username']}" if user['username'] else MSG_USERNAME_MISSING
             text += f"{status_emoji} <b>{user['first_name']}</b> ({username})\n"
             text += f"   🆔 <code>{user['user_id']}</code>\n"
             text += f"   📅 {user['registration_date'][:10]}\n\n"
@@ -556,26 +539,23 @@ async def show_users_list(callback: CallbackQuery, page: int = 1):
         
     except Exception as e:
         logger.error(f"Foydalanuvchilar ro'yxatida xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 # KANALLAR HANDLERS
 async def handle_channels_callbacks(callback: CallbackQuery, data: str, state: FSMContext):
     """Kanallar callback'larini boshqarish"""
     logger.info(f"Channels callback ishga tushdi: {data}")
-    
-    if data == "channels_force_list":
-        logger.info("Majburiy kanallar ro'yxati chaqirildi")
-        await show_force_channels_list(callback)
-    elif data == "channels_add":
-        logger.info("Kanal qo'shish chaqirildi")
-        await start_add_channel(callback, state)
-    elif data == "channels_requests":
-        logger.info("Kanal so'rovlari chaqirildi")
-        await show_channel_requests(callback)
-    elif data == "channels_stats":
-        logger.info("Kanallar statistikasi chaqirildi")
-        await show_channels_stats(callback)
+    actions = {
+        "channels_force_list": lambda: show_force_channels_list(callback),
+        "channels_add": lambda: start_add_channel(callback, state),
+        "channels_requests": lambda: show_channel_requests(callback),
+        "channels_stats": lambda: show_channels_stats(callback),
+    }
+    action = actions.get(data)
+    if action:
+        logger.info(f"Channels action: {data}")
+        await action()
     else:
         logger.warning(f"Noma'lum channels callback: {data}")
 
@@ -583,7 +563,6 @@ async def handle_channels_callbacks(callback: CallbackQuery, data: str, state: F
 async def show_channel_requests(callback: CallbackQuery):
     """Kanal so'rovlarini ko'rsatish"""
     try:
-        db = get_database()
         # Bu yerda pending requests ro'yxatini ko'rsatish kerak
         # Hozircha placeholder
         
@@ -607,7 +586,7 @@ Hozircha so'rovlar yo'q.
         
     except Exception as e:
         logger.error(f"Channel requests'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_channels_stats(callback: CallbackQuery):
@@ -634,7 +613,7 @@ async def show_channels_stats(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Channels stats'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_force_channels_list(callback: CallbackQuery):
@@ -667,7 +646,7 @@ async def show_force_channels_list(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Kanallar ro'yxatida xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def start_add_channel(callback: CallbackQuery, state: FSMContext):
@@ -691,23 +670,21 @@ async def handle_requests_callbacks(callback: CallbackQuery, data: str):
     """So'rovlar callback'larini boshqarish"""
     logger.info(f"Requests callback ishga tushdi: {data}")
     db = get_database()
-    
-    if data == "requests_pending":
-        logger.info("Kutilayotgan so'rovlar chaqirildi")
-        await show_pending_requests(callback, db)
-    elif data == "requests_approved":
-        logger.info("Tasdiqlangan so'rovlar chaqirildi")
-        await show_approved_requests(callback, db)
-    elif data == "requests_rejected":
-        logger.info("Rad etilgan so'rovlar chaqirildi")
-        await show_rejected_requests(callback, db)
-    elif data == "requests_stats":
-        logger.info("So'rovlar statistikasi chaqirildi")
-        await show_requests_stats(callback, db)
-    elif data == "requests_refresh":
+    actions = {
+        "requests_pending": lambda: show_pending_requests(callback, db),
+        "requests_approved": lambda: show_approved_requests(callback, db),
+        "requests_rejected": lambda: show_rejected_requests(callback, db),
+        "requests_stats": lambda: show_requests_stats(callback, db),
+    }
+    if data == "requests_refresh":
         logger.info("So'rovlar yangilash chaqirildi")
         await show_requests_menu(callback)
         await callback.answer("🔄 So'rovlar yangilandi.")
+        return
+    action = actions.get(data)
+    if action:
+        logger.info(f"Requests action: {data}")
+        await action()
     else:
         logger.warning(f"Noma'lum requests callback: {data}")
 
@@ -748,7 +725,7 @@ async def show_pending_requests(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Kutilayotgan so'rovlarda xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_approved_requests(callback: CallbackQuery, db):
@@ -784,7 +761,7 @@ async def show_approved_requests(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Approved requests'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_rejected_requests(callback: CallbackQuery, db):
@@ -822,7 +799,7 @@ async def show_rejected_requests(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Rejected requests'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 async def show_requests_stats(callback: CallbackQuery, db):
@@ -848,32 +825,25 @@ async def show_requests_stats(callback: CallbackQuery, db):
         
     except Exception as e:
         logger.error(f"Requests stats'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 # BROADCAST HANDLERS
 async def handle_broadcast_callbacks(callback: CallbackQuery, data: str, state: FSMContext):
     """Broadcast callback'larini boshqarish"""
     logger.info(f"Broadcast callback ishga tushdi: {data}")
-    
-    if data == "broadcast_all":
-        logger.info("Barchaga broadcast chaqirildi")
-        await start_broadcast_all(callback, state)
-    elif data == "broadcast_active":
-        logger.info("Faollarga broadcast chaqirildi")
-        await start_broadcast_active(callback, state)
-    elif data == "broadcast_text":
-        logger.info("Matn broadcast chaqirildi")
-        await start_broadcast_text(callback, state)
-    elif data == "broadcast_media":
-        logger.info("Media broadcast chaqirildi")
-        await start_broadcast_media(callback, state)
-    elif data == "broadcast_group":
-        logger.info("Guruh broadcast chaqirildi")
-        await start_broadcast_group(callback, state)
-    elif data == "broadcast_status":
-        logger.info("Broadcast holati chaqirildi")
-        await show_broadcast_status(callback)
+    actions = {
+        "broadcast_all": lambda: start_broadcast_all(callback, state),
+        "broadcast_active": lambda: start_broadcast_active(callback, state),
+        "broadcast_text": lambda: start_broadcast_text(callback, state),
+        "broadcast_media": lambda: start_broadcast_media(callback, state),
+        "broadcast_group": lambda: start_broadcast_group(callback),
+        "broadcast_status": lambda: show_broadcast_status(callback),
+    }
+    action = actions.get(data)
+    if action:
+        logger.info(f"Broadcast action: {data}")
+        await action()
     else:
         logger.warning(f"Noma'lum broadcast callback: {data}")
 
@@ -941,7 +911,7 @@ async def start_broadcast_media(callback: CallbackQuery, state: FSMContext):
     await state.update_data(broadcast_target="all")
 
 
-async def start_broadcast_group(callback: CallbackQuery, state: FSMContext):
+async def start_broadcast_group(callback: CallbackQuery):
     """Guruh bo'yicha xabar yuborishni boshlash"""
     await callback.message.edit_text(
         "🎯 <b>Guruh bo'yicha xabar yuborish</b>\n\n"
@@ -984,7 +954,7 @@ async def show_broadcast_status(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Broadcast status'da xato: {e}")
-        await callback.answer("❌ Xato yuz berdi.", show_alert=True)
+        await callback.answer(MSG_GENERIC_ERROR, show_alert=True)
 
 
 # STATE HANDLERS
@@ -1043,7 +1013,7 @@ async def handle_channel_id_input(message: Message, state: FSMContext):
         await message.answer("❌ Kanal ID raqam bo'lishi kerak.")
     except Exception as e:
         logger.error(f"Kanal qo'shishda xato: {e}")
-        await message.answer("❌ Xato yuz berdi.")
+        await message.answer(MSG_GENERIC_ERROR)
         await state.clear()
 
 
@@ -1094,7 +1064,7 @@ async def handle_broadcast_message_input(message: Message, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Broadcast xabarida xato: {e}")
-        await message.answer("❌ Xato yuz berdi.")
+        await message.answer(MSG_GENERIC_ERROR)
         await state.clear()
 
 
@@ -1104,7 +1074,6 @@ async def cancel_handler(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     
-    data = await state.get_data()
     current_state = await state.get_state()
     await state.clear()
 
@@ -1124,7 +1093,7 @@ async def stats_command_handler(message: Message):
     logger.info(f"Stats buyrug'i ishlatildi - User: {message.from_user.id}")
     
     if not is_admin(message.from_user.id):
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
@@ -1153,7 +1122,7 @@ async def stats_command_handler(message: Message):
         
     except Exception as e:
         logger.error(f"Stats buyrug'ida xato: {e}")
-        await message.answer("❌ Statistika olishda xato.")
+        await message.answer(MSG_STATS_ERROR)
 
 
 async def users_command_handler(message: Message):
@@ -1161,7 +1130,7 @@ async def users_command_handler(message: Message):
     logger.info(f"Users buyrug'i ishlatildi - User: {message.from_user.id}")
     
     if not is_admin(message.from_user.id):
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
@@ -1180,7 +1149,7 @@ async def channels_command_handler(message: Message):
     logger.info(f"Channels buyrug'i ishlatildi - User: {message.from_user.id}")
     
     if not is_admin(message.from_user.id):
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
@@ -1199,7 +1168,7 @@ async def broadcast_command_handler(message: Message):
     logger.info(f"Broadcast buyrug'i ishlatildi - User: {message.from_user.id}")
     
     if not is_admin(message.from_user.id):
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
@@ -1218,7 +1187,7 @@ async def backup_command_handler(message: Message):
     logger.info(f"Backup buyrug'i ishlatildi - User: {message.from_user.id}")
     
     if not is_admin(message.from_user.id):
-        await message.reply("❌ Sizda admin huquqi yo'q.")
+        await message.reply(MSG_NO_ADMIN_PERMISSION)
         return
     
     try:
